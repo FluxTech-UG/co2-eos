@@ -1,0 +1,286 @@
+"""CO₂ transport property correlations — pure JAX implementation.
+
+Viscosity:            Laesecke & Muzny, JPCRD 46, 013107 (2017)
+Thermal conductivity: Huber, Sykioti, Assael & Perkins, JPCRD 45, 013102 (2016)
+
+Coefficients cross-referenced against CoolProp's CarbonDioxide.json and
+TransportRoutines.cpp.  CoolProp is never imported here.
+"""
+
+import jax
+import jax.numpy as jnp
+from functools import partial
+
+jax.config.update("jax_enable_x64", True)
+
+# ── Shared constants ──────────────────────────────────────────────────────
+# Use the same values as the Span-Wagner EOS module.
+TC = 304.1282            # K
+RHOC_MOLAR = 10624.9063  # mol/m³
+M = 0.0440098            # kg/mol
+R_MOLAR = 8.31451        # J/(mol·K)
+PC = 7377300.0            # Pa
+RHOC_MASS = RHOC_MOLAR * M  # kg/m³ ≈ 467.60
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Residual Helmholtz derivatives (local copy to keep this module standalone)
+# ═══════════════════════════════════════════════════════════════════════════
+# We need αʳ_δ and αʳ_δδ for the conductivity critical enhancement.
+# Import the alphar function and build grads here rather than importing
+# private functions from span_wagner.
+from co2_eos.span_wagner import alpha0, alphar
+
+_dalr_ddelta = jax.grad(alphar, argnums=1)
+_d2alr_ddelta2 = jax.grad(lambda tau, delta: _dalr_ddelta(tau, delta), argnums=1)
+_d2al0_dtau2 = jax.grad(jax.grad(alpha0, argnums=0), argnums=0)
+_d2alr_dtau2 = jax.grad(jax.grad(alphar, argnums=0), argnums=0)
+_d2alr_ddelta_dtau = jax.grad(lambda t, d: _dalr_ddelta(t, d), argnums=0)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# VISCOSITY — Laesecke & Muzny (2017)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Dilute gas η₀(T) — Eq. (4) ───────────────────────────────────────────
+_ETA0_A = jnp.array([
+    1749.354893188350,
+    -369.069300007128,
+    5423856.34887691,
+    -2.21283852168356,
+    -269503.247933569,
+    73145.021531826,
+    5.34368649509278,
+])
+
+
+def _eta_dilute(T):
+    """Dilute-gas viscosity η₀(T) [Pa·s]."""
+    a = _ETA0_A
+    T_sixth = T ** (1.0 / 6.0)
+    T_third = T ** (1.0 / 3.0)
+    den = (a[0]
+           + a[1] * T_sixth
+           + a[2] * jnp.exp(a[3] * T_third)
+           + (a[4] + a[5] * T_third) / jnp.exp(T_third)
+           + a[6] * jnp.sqrt(T))
+    return 0.0010055 * jnp.sqrt(T) / den
+
+
+# ── Initial density dependence (Rainwater-Friend) ────────────────────────
+_EPSILON_OVER_K = 200.76       # K
+_SIGMA = 3.78421e-10           # m
+_NA = 6.02214129e23            # 1/mol
+
+_RF_B = jnp.array([
+    -19.572881, 219.73999, -1015.3226, 2471.0125,
+    -3375.1717, 2491.6597, -787.26086, 14.085455, -0.34664158,
+])
+_RF_T = jnp.array([0.0, -0.25, -0.5, -0.75, -1.0, -1.25, -1.5, -2.5, -5.5])
+
+
+def _eta_initial(T, rho_molar, eta0):
+    """Initial-density viscosity contribution [Pa·s].
+
+    η_initial = η₀ · B_η · ρ_molar
+    """
+    T_star = T / _EPSILON_OVER_K
+    B_eta_star = jnp.sum(_RF_B * T_star ** _RF_T)
+    B_eta = _NA * _SIGMA ** 3 * B_eta_star  # m³/mol
+    return eta0 * B_eta * rho_molar
+
+
+# ── Higher-order (residual) — Eqs. (8)-(9) ───────────────────────────────
+_TT = 216.592       # K — triple-point temperature
+_RHO_TL = 1178.53   # kg/m³ — triple-point saturated liquid density
+_C1 = 0.360603235428487
+_C2 = 0.121550806591497
+_GAMMA_VISC = 8.06282737481277
+
+# Reference viscosity scale η_tL — Eq. (9)
+_ETA_TL = (_RHO_TL ** (2.0 / 3.0)
+           * (R_MOLAR * _TT) ** 0.5
+           / (M ** (1.0 / 6.0) * 84446887.43579945))
+
+
+def _eta_residual(T, rho_mass):
+    """Higher-order viscosity contribution [Pa·s]."""
+    Tr = T / _TT
+    rhor = rho_mass / _RHO_TL
+    return _ETA_TL * (_C1 * Tr * rhor ** 3
+                      + (rhor ** 2 + rhor ** _GAMMA_VISC) / (Tr - _C2))
+
+
+# ── Scalar viscosity ─────────────────────────────────────────────────────
+
+def _scalar_viscosity(T, rho):
+    """Dynamic viscosity μ [Pa·s] at scalar (T, ρ [kg/m³])."""
+    rho_molar = rho / M
+    eta0 = _eta_dilute(T)
+    eta_init = _eta_initial(T, rho_molar, eta0)
+    eta_res = _eta_residual(T, rho)
+    return eta0 + eta_init + eta_res
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# THERMAL CONDUCTIVITY — Huber et al. (2016)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Dilute gas λ₀(T) — Eq. (3) ───────────────────────────────────────────
+_LAM0_L = jnp.array([0.0151874307, 0.0280674040, 0.0228564190, -0.00741624210])
+
+
+def _lambda_dilute(T):
+    """Dilute-gas thermal conductivity λ₀(T) [W/(m·K)]."""
+    tau = TC / T
+    poly = (_LAM0_L[0] + _LAM0_L[1] * tau
+            + _LAM0_L[2] * tau ** 2 + _LAM0_L[3] * tau ** 3)
+    return tau ** (-0.5) / poly / 1000.0  # mW → W
+
+
+# ── Residual λ_res(T, ρ) — polynomial ────────────────────────────────────
+_LAM_RES_B = jnp.array([
+    0.0100128,  0.0560488, -0.081162,  0.0624337, -0.0206336, 0.00253248,
+    0.00430829, -0.0358563, 0.067148, -0.0522855,  0.0174571, -0.00196414,
+])
+_LAM_RES_D = jnp.array([1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6], dtype=jnp.float64)
+_LAM_RES_T = jnp.array([0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1], dtype=jnp.float64)
+
+_RHOMASS_REDUCING = 467.6  # kg/m³ (same as RHOC_MASS)
+
+
+def _lambda_residual(T, rho):
+    """Residual thermal conductivity [W/(m·K)]."""
+    tau = TC / T
+    delta = rho / _RHOMASS_REDUCING
+    return jnp.sum(_LAM_RES_B * delta ** _LAM_RES_D * tau ** _LAM_RES_T)
+
+
+# ── Critical enhancement — simplified Olchowy-Sengers ────────────────────
+_KB = 1.3806488e-23    # J/K
+_R0 = 1.02             # CO₂-specific amplitude ratio
+_GAMMA_CE = 0.052      # CO₂-specific
+_GAMMA_EXP = 1.239     # universal critical exponent γ
+_NU = 0.63             # universal critical exponent ν
+_ZETA0 = 1.5e-10       # m
+_QD = 2.5e9            # 1/m
+_T_REF = 456.19        # K
+
+
+def _lambda_critical(T, rho, mu):
+    """Critical enhancement of thermal conductivity [W/(m·K)].
+
+    Requires viscosity μ [Pa·s] as input (avoids circular dependency).
+    Uses EOS reduced Helmholtz derivatives for compressibility.
+    """
+    rho_molar = rho / M
+    tau = TC / T
+    delta = rho_molar / RHOC_MOLAR
+
+    # ── dp/dρ at (T, ρ) ──
+    alr_d = _dalr_ddelta(tau, delta)
+    alr_dd = _d2alr_ddelta2(tau, delta)
+    dp_drho_mol = R_MOLAR * T * (1.0 + 2.0 * delta * alr_d
+                                  + delta ** 2 * alr_dd)
+
+    chi = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_mol
+
+    # ── dp/dρ at reference temperature T_ref (same δ) ──
+    tau_ref = TC / _T_REF
+    alr_d_ref = _dalr_ddelta(tau_ref, delta)
+    alr_dd_ref = _d2alr_ddelta2(tau_ref, delta)
+    dp_drho_ref = R_MOLAR * _T_REF * (1.0 + 2.0 * delta * alr_d_ref
+                                        + delta ** 2 * alr_dd_ref)
+
+    chi_ref = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_ref * _T_REF / T
+
+    diff = chi - chi_ref
+
+    # ── Correlation length ζ ──
+    # Use safe branch: if diff < 0, set zeta to 0 (no enhancement)
+    diff_safe = jnp.maximum(diff, 0.0)
+    zeta = _ZETA0 * (diff_safe / _GAMMA_CE) ** (_NU / _GAMMA_EXP)
+
+    # ── Molar heat capacities from EOS derivatives ──
+    # Cv/R = -τ²·(α⁰_ττ + αʳ_ττ)
+    # For α⁰_ττ we use the known analytical result for CO₂ ideal gas.
+    # But it's cleaner to compute Cp/Cv ratio from mechanical derivatives.
+    #
+    # Cv_molar = R · (-τ²·(α⁰_ττ + αʳ_ττ))
+    # Cp_molar = Cv_molar + R · (1 + δαʳ_δ - δταʳ_δτ)² / (1 + 2δαʳ_δ + δ²αʳ_δδ)
+
+    al0_tt = _d2al0_dtau2(tau, delta)
+    alr_tt = _d2alr_dtau2(tau, delta)
+    alr_dt = _d2alr_ddelta_dtau(tau, delta)
+
+    cv_over_R = -tau ** 2 * (al0_tt + alr_tt)
+    num_cp = (1.0 + delta * alr_d - delta * tau * alr_dt) ** 2
+    den_cp = 1.0 + 2.0 * delta * alr_d + delta ** 2 * alr_dd
+    cp_over_R = cv_over_R + num_cp / den_cp
+
+    cv_molar = R_MOLAR * cv_over_R
+    cp_molar = R_MOLAR * cp_over_R
+
+    # ── Ω functions ──
+    qd_zeta = _QD * zeta
+    inv_qd_zeta = 1.0 / jnp.maximum(qd_zeta, 1e-300)
+
+    omega = (2.0 / jnp.pi) * (
+        (cp_molar - cv_molar) / cp_molar * jnp.arctan(qd_zeta)
+        + cv_molar / cp_molar * qd_zeta
+    )
+    omega0 = (2.0 / jnp.pi) * (
+        1.0 - jnp.exp(-1.0 / (inv_qd_zeta
+                                + (qd_zeta) ** 2 / (3.0 * delta ** 2)))
+    )
+
+    # ── Critical enhancement ──
+    zeta_safe = jnp.maximum(zeta, 1e-300)
+    lam_c = (rho_molar * cp_molar * _R0 * _KB * T
+             / (6.0 * jnp.pi * mu * zeta_safe)
+             * (omega - omega0))
+
+    # Zero out when diff <= 0 (no enhancement)
+    return jnp.where(diff > 0.0, lam_c, 0.0)
+
+
+# ── Scalar thermal conductivity ──────────────────────────────────────────
+
+def _scalar_thermal_conductivity(T, rho):
+    """Thermal conductivity λ [W/(m·K)] at scalar (T, ρ [kg/m³])."""
+    mu = _scalar_viscosity(T, rho)
+    lam0 = _lambda_dilute(T)
+    lam_res = _lambda_residual(T, rho)
+    lam_crit = _lambda_critical(T, rho, mu)
+    return lam0 + lam_res + lam_crit
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Public API — batched, JIT-compiled
+# ═══════════════════════════════════════════════════════════════════════════
+
+@jax.jit
+def viscosity(T, rho):
+    """Dynamic viscosity μ [Pa·s]. Batched over leading axis.
+
+    Args:
+        T: temperature [K], 1-D array
+        rho: mass density [kg/m³], 1-D array
+
+    Returns:
+        μ [Pa·s], same shape as inputs
+    """
+    return jax.vmap(_scalar_viscosity)(T, rho)
+
+
+@jax.jit
+def thermal_conductivity(T, rho):
+    """Thermal conductivity λ [W/(m·K)]. Batched over leading axis.
+
+    Args:
+        T: temperature [K], 1-D array
+        rho: mass density [kg/m³], 1-D array
+
+    Returns:
+        λ [W/(m·K)], same shape as inputs
+    """
+    return jax.vmap(_scalar_thermal_conductivity)(T, rho)

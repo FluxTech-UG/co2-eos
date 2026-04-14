@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "co2-eos"
+version = "0.1.0"
+description = "Differentiable CO₂ thermodynamic properties in JAX"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "John Patrick Therrien", email = "john@flux-tech.de" },
+]
+keywords = ["CO2", "equation-of-state", "thermodynamics", "JAX", "autodiff", "Span-Wagner"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+dependencies = [
+    "jax>=0.4",
+    "jaxlib>=0.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "CoolProp>=6.6",
+    "pytest>=7.0",
+    "scipy>=1.10",
+]
+
+[project.urls]
+Homepage = "https://github.com/John-FluxTech/co2-eos"
+Repository = "https://github.com/John-FluxTech/co2-eos"
+Issues = "https://github.com/John-FluxTech/co2-eos/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["co2_eos*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
