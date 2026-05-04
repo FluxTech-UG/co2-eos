@@ -142,3 +142,15 @@ def saturation_densities_P(P):
     rho_l = _eval_spline(P, _TABLE['P_breaks'], _TABLE['rho_l_P_c'])
     rho_v = _eval_spline(P, _TABLE['P_breaks'], _TABLE['rho_v_P_c'])
     return rho_l, rho_v
+
+
+def saturation_entropies_P(P):
+    """Saturated liquid and vapor entropies [J/(kg*K)] at pressure P [Pa].
+
+    Returns:
+        (s_l, s_v)
+    """
+    _ensure_loaded()
+    s_l = _eval_spline(P, _TABLE['P_breaks'], _TABLE['s_l_P_c'])
+    s_v = _eval_spline(P, _TABLE['P_breaks'], _TABLE['s_v_P_c'])
+    return s_l, s_v

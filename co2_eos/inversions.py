@@ -20,8 +20,16 @@ from co2_eos import saturation as sat
 # Enable float64
 jax.config.update("jax_enable_x64", True)
 
-# Eagerly load saturation table so it's available as static data during tracing
-sat._ensure_loaded()
+# Eagerly load the saturation table at module-import time (outside any trace
+# context). If the table is loaded for the first time inside a JIT trace,
+# the arrays it materialises end up tagged as tracers, breaking reverse-mode
+# differentiation through density_from_PT. Loading it here pins them as
+# concrete constants. If the file is missing we tolerate it — first
+# inversion call will surface a clear FileNotFoundError.
+try:
+    sat._ensure_loaded()
+except FileNotFoundError:
+    pass
 
 # Phase hint constants
 LIQUID = 0
