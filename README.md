@@ -81,15 +81,19 @@ pip install co2-eos
 
 Requires Python ≥ 3.10 and JAX ≥ 0.4. No other dependencies.
 
-For development:
+To run the validation tests (which compare against CoolProp):
 
 ```bash
 git clone https://github.com/John-FluxTech/co2-eos.git
 cd co2-eos
-pip install -e ".[dev]"
+pip install -e ".[test]"
+pytest tests/ -v
 ```
 
-The `[dev]` extra adds CoolProp (for validation tests only) and pytest.
+The `[test]` extra adds CoolProp (validation only — not a runtime
+dependency) and pytest. The `[dev]` extra additionally pulls in scipy for
+regenerating the saturation table from scratch via
+`scripts/generate_saturation_table.py`.
 
 ## Validation
 
@@ -101,7 +105,10 @@ CO2-EOS is validated against CoolProp across the full valid range. The test suit
 - Inversions (P,T → ρ), (P,h → state), (ρ,u → state) including near-critical conditions
 - Comparison of all Helmholtz derivatives against CoolProp's analytical values
 
-Maximum relative errors against CoolProp are below 10⁻¹⁰ for thermodynamic properties (limited by floating-point evaluation order, not by formulation differences — both implement the same Span-Wagner polynomial).
+Both libraries implement the same Span-Wagner polynomial and the same reference transport correlations, so empirical agreement across the validation grid is at machine precision for the primary quantities and only loosens where physics — not formulation — amplifies floating-point noise:
+
+- **Density and viscosity:** below 10⁻¹² relative error everywhere on the grid (limited by floating-point evaluation order).
+- **cp, speed of sound, thermal conductivity:** below 10⁻⁹ in the bulk; up to a few × 10⁻⁸ at points where ∂q/∂ρ is locally enormous — the Widom line and within ~10 % of the saturation curve. There the inversion's residual ρ-error is amplified through that derivative; at the same (T, ρ) the underlying polynomials still agree at machine precision.
 
 Run the validation suite:
 

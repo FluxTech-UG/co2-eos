@@ -26,9 +26,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
+test = [
     "CoolProp>=6.6",
     "pytest>=7.0",
+]
+# `dev` adds anything needed to regenerate the saturation table from scratch
+# (scipy for the Maxwell-construction solver, CoolProp for initial guesses).
+dev = [
+    "co2-eos[test]",
     "scipy>=1.10",
 ]
 
