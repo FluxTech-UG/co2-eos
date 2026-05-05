@@ -1,5 +1,7 @@
 # CO2-EOS
 
+[![tests](https://github.com/John-FluxTech/co2-eos/actions/workflows/test.yml/badge.svg)](https://github.com/John-FluxTech/co2-eos/actions/workflows/test.yml)
+
 Differentiable CO₂ thermodynamic properties in JAX.
 
 CO2-EOS is a pure-JAX implementation of the Span-Wagner equation of state for carbon dioxide. Every property evaluation is JIT-compiled, vectorisable with `vmap`, and fully differentiable with `jax.grad` — enabling gradient-based optimisation of any system that depends on CO₂ thermodynamics.

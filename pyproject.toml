@@ -1,5 +1,7 @@
 [build-system]
-requires = ["setuptools>=68.0"]
+# setuptools >=77 supports SPDX `license = "..."` as the canonical field;
+# we use it instead of the deprecated `License ::` trove classifier.
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -16,7 +18,12 @@ keywords = ["CO2", "equation-of-state", "thermodynamics", "JAX", "autodiff", "Sp
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Scientific/Engineering :: Chemistry",
 ]
@@ -40,6 +47,7 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/John-FluxTech/co2-eos"
 Repository = "https://github.com/John-FluxTech/co2-eos"
+Documentation = "https://github.com/John-FluxTech/co2-eos#readme"
 Issues = "https://github.com/John-FluxTech/co2-eos/issues"
 
 [tool.setuptools.packages.find]
