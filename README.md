@@ -15,8 +15,9 @@ print(state['pressure'], state['cp'], state['speed_of_sound'])
 # State from (P, T) — phase-aware, robust near the critical point
 state = co2.state_from_PT(P=8e6, T=310.0)
 
-# Differentiate anything
-dP_dT = jax.grad(lambda T: co2.state_from_PT(P=8e6, T=T)['pressure'])(310.0)
+# Differentiate anything — e.g. ∂ρ/∂T at constant P
+# (peaks near the Widom line at these conditions)
+drho_dT = jax.grad(lambda T: co2.state_from_PT(P=8e6, T=T)['density'])(310.0)
 
 # Vectorise across conditions
 import jax.numpy as jnp

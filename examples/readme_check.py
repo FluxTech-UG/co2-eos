@@ -59,11 +59,14 @@ def block_state_from_PT():
 
 
 def block_jax_grad():
-    print("\n# Differentiate anything")
-    dP_dT = jax.grad(lambda T: co2.state_from_PT(P=8e6, T=T)["pressure"])(310.0)
-    val = float(dP_dT)
-    print(f"  dP/dT |_(P=8e6, T=310) = {val}")
+    print("\n# Differentiate anything — e.g. ∂ρ/∂T at constant P")
+    drho_dT = jax.grad(lambda T: co2.state_from_PT(P=8e6, T=T)["density"])(310.0)
+    val = float(drho_dT)
+    print(f"  drho/dT |_(P=8e6, T=310) = {val}")
     _check("jax.grad returned a finite scalar", math.isfinite(val))
+    # Near the Widom line at (8 MPa, 310 K), CO2 expands strongly with T:
+    # ∂ρ/∂T at constant P should be a large negative number (≈ -8 kg/(m³·K)).
+    _check("∂ρ/∂T is negative (gas-like density decreases with T)", val < 0)
 
 
 def block_jax_vmap():

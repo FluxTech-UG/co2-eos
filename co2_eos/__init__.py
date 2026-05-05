@@ -165,6 +165,10 @@ def state_from_PT(P, T, phase_hint=AUTO):
         P: Pressure [Pa] (scalar)
         T: Temperature [K] (scalar)
         phase_hint: LIQUID, VAPOR, or SUPERCRITICAL/AUTO (default AUTO).
+            AUTO is an alias for SUPERCRITICAL. For points clearly in the
+            subcritical liquid or vapor region, passing an explicit
+            ``LIQUID`` or ``VAPOR`` hint gives a better initial guess and
+            more robust convergence.
 
     Returns:
         State dict (see ``properties``). ``pressure`` echoes the input ``P``.
@@ -180,7 +184,13 @@ def state_from_PT(P, T, phase_hint=AUTO):
 
 @jax.jit
 def density_from_PT(P, T, phase_hint=AUTO):
-    """Density [kg/m³] at (P, T). Phase-aware Halley solve."""
+    """Density [kg/m³] at (P, T). Phase-aware Halley solve.
+
+    ``phase_hint`` defaults to AUTO (alias for SUPERCRITICAL). For points
+    clearly in subcritical liquid or vapor regions, an explicit ``LIQUID``
+    or ``VAPOR`` hint gives a better initial guess and more robust
+    convergence.
+    """
     P = jnp.asarray(P, dtype=jnp.float64)
     T = jnp.asarray(T, dtype=jnp.float64)
     phase = jnp.asarray(phase_hint, dtype=jnp.int32)
@@ -196,8 +206,11 @@ def state_from_Ph(P, h, phase_hint=AUTO):
         P: Pressure [Pa] (scalar)
         h: Specific enthalpy [J/kg] (scalar)
         phase_hint: LIQUID, VAPOR, or SUPERCRITICAL/AUTO (default AUTO).
-            In the dome, AUTO picks ρ_l vs ρ_v by which side of the
-            mean enthalpy ``h`` falls.
+            AUTO is an alias for SUPERCRITICAL; in the dome it picks ρ_l
+            vs ρ_v by which side of the mean enthalpy ``h`` falls. For
+            points clearly in the subcritical liquid or vapor region,
+            passing an explicit ``LIQUID`` or ``VAPOR`` hint gives a
+            better initial guess and more robust convergence.
 
     Returns:
         State dict (see ``properties``). ``pressure`` and ``enthalpy``

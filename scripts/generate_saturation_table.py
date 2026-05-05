@@ -3,10 +3,11 @@
 Solves the Maxwell construction (equal P and equal Gibbs energy) at each
 subcritical temperature to find coexisting liquid and vapor densities.
 CoolProp provides initial guesses; final values are derived entirely from
-the Span-Wagner EOS in src/span_wagner.py.
+the Span-Wagner EOS in co2_eos/span_wagner.py.
 
-Outputs data/saturation_table.npz with cubic spline coefficients for
-JIT-compilable interpolation in src/saturation.py.
+Outputs co2_eos/data/saturation_table.npz with cubic spline coefficients
+for JIT-compilable interpolation in co2_eos/saturation.py. The .npz lives
+inside the package so it ships in the wheel.
 """
 
 import numpy as np
@@ -30,7 +31,7 @@ T_TRIPLE = 216.592       # K — CO2 triple point temperature
 T_CRIT = TC              # 304.1282 K
 T_NEAR_CRIT = T_CRIT - 0.001  # stop table 1 mK below Tc
 
-DATA_DIR = Path(__file__).parent.parent / "data"
+DATA_DIR = Path(__file__).parent.parent / "co2_eos" / "data"
 
 
 def gibbs(T, rho):

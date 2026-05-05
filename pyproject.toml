@@ -41,5 +41,8 @@ Issues = "https://github.com/John-FluxTech/co2-eos/issues"
 where = ["."]
 include = ["co2_eos*"]
 
+[tool.setuptools.package-data]
+co2_eos = ["data/*.npz"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

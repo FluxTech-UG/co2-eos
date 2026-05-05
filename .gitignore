@@ -4,7 +4,6 @@ __pycache__/
 dist/
 build/
 .eggs/
-data/*.npz
 .pytest_cache/
 *.egg
 .venv/

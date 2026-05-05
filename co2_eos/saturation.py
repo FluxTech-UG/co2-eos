@@ -19,7 +19,7 @@ from pathlib import Path
 
 jax.config.update("jax_enable_x64", True)
 
-_TABLE_PATH = Path(__file__).parent.parent / "data" / "saturation_table.npz"
+_TABLE_PATH = Path(__file__).parent / "data" / "saturation_table.npz"
 
 # ── Table loading (lazy, once) ───────────────────────────────────────────
 # Table is loaded outside JIT tracing to avoid tracer leaks.
