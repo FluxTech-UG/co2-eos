@@ -36,7 +36,7 @@ But CoolProp is a C++ library with Python bindings. You can't `jax.grad` through
 CO2-EOS solves this for CO₂ by implementing the same reference EOS (Span-Wagner 1996) directly in JAX:
 
 - **Differentiable.** `jax.grad` through any property, any inversion, any combination. No finite differences. Exact gradients via autodiff, including second and higher derivatives for free.
-- **Fast.** JIT-compiled evaluation of all thermodynamic properties in ~1.8 μs/point, roughly 185× faster than CoolProp's Python interface.
+- **Fast.** JIT-compiled and vectorisable. Forward state evaluation at fixed (T, ρ) runs in roughly 1.8 μs/point under `jax.vmap`. The (P, T) workflow that mirrors `PropsSI` includes an iterative density solve and flattens to a few tens of microseconds per point at large batches, several times faster than `CoolProp.PropsSI` in a Python loop on the same inputs (see `examples/launch_demo.ipynb`, section 2).
 - **Composable.** `jit`, `vmap`, `grad`, `custom_vjp`: the full JAX transformation stack works. Embed property evaluations inside your own JIT-compiled simulation and differentiate end-to-end.
 - **Phase-aware.** Robust inversions near the critical point using Halley's method with step damping and bisection fallback. Two-phase dome detection that avoids convergence to thermodynamically unstable spinodal states.
 
@@ -110,7 +110,7 @@ CO2-EOS is validated against CoolProp across the full valid range. The test suit
 Both libraries implement the same Span-Wagner polynomial and the same reference transport correlations, so empirical agreement across the validation grid is at machine precision for the primary quantities and only loosens where physics (not formulation) amplifies floating-point noise:
 
 - **Density and viscosity:** below 10⁻¹² relative error everywhere on the grid (limited by floating-point evaluation order).
-- **cp, speed of sound, thermal conductivity:** below 10⁻⁹ in the bulk; up to a few × 10⁻⁸ at points where ∂q/∂ρ is locally enormous: the Widom line and within ~10 % of the saturation curve. There the inversion's residual ρ-error is amplified through that derivative; at the same (T, ρ) the underlying polynomials still agree at machine precision.
+- **cp, speed of sound, thermal conductivity:** below 10⁻⁹ in the bulk; up to a few × 10⁻⁸ for the speed of sound near the Widom line and within ~10 % of the saturation curve, and up to a few × 10⁻⁶ for cp at the very tip of its peak just above the critical pressure. There the inversion's residual ρ-error is amplified through ∂q/∂ρ, which is locally enormous (cp climbs above 30,000 J/(kg·K) at the peak, so a ~0.1 J/(kg·K) absolute difference still rounds to ~10⁻⁶ relative); at the same (T, ρ) the underlying polynomials still agree at machine precision.
 
 Run the validation suite:
 
