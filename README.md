@@ -36,7 +36,7 @@ But CoolProp is a C++ library with Python bindings. You can't `jax.grad` through
 CO2-EOS solves this for CO₂ by implementing the same reference EOS (Span-Wagner 1996) directly in JAX:
 
 - **Differentiable.** `jax.grad` through any property, any inversion, any combination. No finite differences. Exact gradients via autodiff, including second and higher derivatives for free.
-- **Fast.** JIT-compiled and vectorisable. Forward state evaluation at fixed (T, ρ) runs in roughly 1.8 μs/point under `jax.vmap`. The (P, T) workflow that mirrors `PropsSI` includes an iterative density solve and flattens to a few tens of microseconds per point at large batches, several times faster than `CoolProp.PropsSI` in a Python loop on the same inputs (see `examples/launch_demo.ipynb`, section 2).
+- **Fast.** JIT-compiled and vectorisable. Forward state evaluation at fixed (T, ρ) runs in roughly 1.8 μs/point under `jax.vmap`. The (P, T) workflow that mirrors `PropsSI` includes an iterative density solve and flattens to a few tens of microseconds per point at large batches, roughly 2.7× faster than `CoolProp.PropsSI` in a Python loop on the same inputs (measured at a 10,000-point batch on an Apple M2 Pro; see `examples/launch_demo.ipynb`, section 2).
 - **Composable.** `jit`, `vmap`, `grad`, `custom_vjp`: the full JAX transformation stack works. Embed property evaluations inside your own JIT-compiled simulation and differentiate end-to-end.
 - **Phase-aware.** Robust inversions near the critical point using Halley's method with step damping and bisection fallback. Two-phase dome detection that avoids convergence to thermodynamically unstable spinodal states.
 
