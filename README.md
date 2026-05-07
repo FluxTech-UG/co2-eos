@@ -1,6 +1,8 @@
 # CO2-EOS
 
 [![tests](https://github.com/John-FluxTech/co2-eos/actions/workflows/test.yml/badge.svg)](https://github.com/John-FluxTech/co2-eos/actions/workflows/test.yml)
+[![nbviewer](https://img.shields.io/badge/render-nbviewer-F37726?logo=jupyter&logoColor=white)](https://nbviewer.org/github/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb)
 
 Differentiable CO₂ thermodynamic properties in JAX.
 
@@ -27,6 +29,10 @@ T_array = jnp.linspace(280, 340, 100)
 states = jax.vmap(lambda T: co2.state_from_PT(P=8e6, T=T))(T_array)
 ```
 
+## Try it without cloning
+
+[`examples/launch_demo.ipynb`](examples/launch_demo.ipynb) is the launch demo: validation against CoolProp, the CPU and GPU benchmarks cited below, and a worked example of gradient-based optimisation through `state_from_PT`. [Render it on nbviewer](https://nbviewer.org/github/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb) for a static read, or [open it on Colab](https://colab.research.google.com/github/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb) and switch the runtime to T4 GPU to reproduce the GPU numbers in about a minute.
+
 ## Why this exists
 
 If you're building CO₂ system models in Python and need thermodynamic properties, CoolProp is the standard choice. It's excellent: accurate, well-tested, and covers 110+ fluids.
@@ -36,7 +42,7 @@ But CoolProp is a C++ library with Python bindings. You can't `jax.grad` through
 CO2-EOS solves this for CO₂ by implementing the same reference EOS (Span-Wagner 1996) directly in JAX:
 
 - **Differentiable.** `jax.grad` through any property, any inversion, any combination. No finite differences. Exact gradients via autodiff, including second and higher derivatives for free.
-- **Fast.** JIT-compiled and vectorisable. Forward state evaluation at fixed (T, ρ) runs in roughly 1.8 μs/point under `jax.vmap`. The (P, T) workflow that mirrors `PropsSI` includes an iterative density solve and flattens to a few tens of microseconds per point at large batches, roughly 2.7× faster than `CoolProp.PropsSI` in a Python loop on the same inputs (measured at a 10,000-point batch on an Apple M2 Pro; see `examples/launch_demo.ipynb`, section 2).
+- **Fast.** JIT-compiled and vectorisable. Forward state evaluation at fixed (T, ρ) runs in roughly 1.8 μs/point under `jax.vmap`. The (P, T) workflow that mirrors `PropsSI` includes an iterative density solve and flattens to a few tens of microseconds per point at large batches, roughly 2.7× faster than `CoolProp.PropsSI` in a Python loop on the same inputs (measured at a 10,000-point batch on an Apple M2 Pro; see `examples/launch_demo.ipynb`, section 2). On a Colab T4 GPU the same `state_from_PT` workflow runs at 27,800 states/sec on a 10⁶-point batch (36 μs/pt), versus 1,600 states/sec on Colab CPU (615 μs/pt), a 17× speedup. The ceiling is set by the iterative density solve: a `jax.while_loop` with data-dependent control flow forces lockstep execution across GPU warps, so the polynomial evaluation parallelises cleanly but is not the dominant cost. A fully feed-forward kernel on the same hardware would land closer to 50 to 100×.
 - **Composable.** `jit`, `vmap`, `grad`, `custom_vjp`: the full JAX transformation stack works. Embed property evaluations inside your own JIT-compiled simulation and differentiate end-to-end.
 - **Phase-aware.** Robust inversions near the critical point using Halley's method with step damping and bisection fallback. Two-phase dome detection that avoids convergence to thermodynamically unstable spinodal states.
 
