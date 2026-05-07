@@ -1,7 +1,6 @@
 # CO2-EOS
 
 [![tests](https://github.com/John-FluxTech/co2-eos/actions/workflows/test.yml/badge.svg)](https://github.com/John-FluxTech/co2-eos/actions/workflows/test.yml)
-[![nbviewer](https://img.shields.io/badge/render-nbviewer-F37726?logo=jupyter&logoColor=white)](https://nbviewer.org/github/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb)
 
 Differentiable CO₂ thermodynamic properties in JAX.
@@ -31,7 +30,7 @@ states = jax.vmap(lambda T: co2.state_from_PT(P=8e6, T=T))(T_array)
 
 ## Try it without cloning
 
-[`examples/launch_demo.ipynb`](examples/launch_demo.ipynb) is the launch demo: validation against CoolProp, the CPU and GPU benchmarks cited below, and a worked example of gradient-based optimisation through `state_from_PT`. [Render it on nbviewer](https://nbviewer.org/github/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb) for a static read, or [open it on Colab](https://colab.research.google.com/github/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb) and switch the runtime to T4 GPU to reproduce the GPU numbers in about a minute.
+[`examples/launch_demo.ipynb`](examples/launch_demo.ipynb) is the launch demo: validation against CoolProp, the CPU and GPU benchmarks cited below, and a worked example of gradient-based optimisation through `state_from_PT`. [Read it on GitHub](https://github.com/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb) for a static render, or [open it on Colab](https://colab.research.google.com/github/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb) and switch the runtime to T4 GPU to reproduce the comparison in about 15 minutes, most of that being the CPU baseline.
 
 ## Why this exists
 
