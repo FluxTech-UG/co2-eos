@@ -4,7 +4,7 @@
 # One-time setup on PyPI before the first tag push:
 #   PyPI → Account settings → Publishing → Add a Pending Publisher
 #     PyPI Project Name : co2-eos
-#     Owner             : John-FluxTech
+#     Owner             : FluxTech-UG
 #     Repository name   : co2-eos
 #     Workflow name     : release.yml
 #     Environment name  : pypi

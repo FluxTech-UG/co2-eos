@@ -1,7 +1,7 @@
 # CO2-EOS
 
-[![tests](https://github.com/John-FluxTech/co2-eos/actions/workflows/test.yml/badge.svg)](https://github.com/John-FluxTech/co2-eos/actions/workflows/test.yml)
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb)
+[![tests](https://github.com/FluxTech-UG/co2-eos/actions/workflows/test.yml/badge.svg)](https://github.com/FluxTech-UG/co2-eos/actions/workflows/test.yml)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/FluxTech-UG/co2-eos/blob/main/examples/launch_demo.ipynb)
 
 Differentiable CO₂ thermodynamic properties in JAX.
 
@@ -38,7 +38,7 @@ states = jax.vmap(lambda T: co2.state_from_PT(P=8e6, T=T))(T_array)
 
 ## Try it without cloning
 
-[`examples/launch_demo.ipynb`](examples/launch_demo.ipynb) is the launch demo: validation against CoolProp, the `state_from_PT` CPU/GPU benchmarks, and a worked example of gradient-based optimisation through `state_from_PT`. (The v0.2 hot-path `(ρ, u)` benchmarks are in [`bench/PROFILING.md`](bench/PROFILING.md).) [Read it on GitHub](https://github.com/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb) for a static render, or [open it on Colab](https://colab.research.google.com/github/John-FluxTech/co2-eos/blob/main/examples/launch_demo.ipynb) and switch the runtime to T4 GPU to reproduce the comparison in about 15 minutes, most of that being the CPU baseline.
+[`examples/launch_demo.ipynb`](examples/launch_demo.ipynb) is the launch demo: validation against CoolProp, the `state_from_PT` CPU/GPU benchmarks, and a worked example of gradient-based optimisation through `state_from_PT`. (The v0.2 hot-path `(ρ, u)` benchmarks are in [`bench/PROFILING.md`](bench/PROFILING.md).) [Read it on GitHub](https://github.com/FluxTech-UG/co2-eos/blob/main/examples/launch_demo.ipynb) for a static render, or [open it on Colab](https://colab.research.google.com/github/FluxTech-UG/co2-eos/blob/main/examples/launch_demo.ipynb) and switch the runtime to T4 GPU to reproduce the comparison in about 15 minutes, most of that being the CPU baseline.
 
 ## Why this exists
 
@@ -139,7 +139,7 @@ Requires Python ≥ 3.10 and JAX ≥ 0.4. No other dependencies.
 To run the validation tests (which compare against CoolProp):
 
 ```bash
-git clone https://github.com/John-FluxTech/co2-eos.git
+git clone https://github.com/FluxTech-UG/co2-eos.git
 cd co2-eos
 pip install -e ".[test]"
 pytest tests/ -v

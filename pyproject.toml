@@ -45,10 +45,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/John-FluxTech/co2-eos"
-Repository = "https://github.com/John-FluxTech/co2-eos"
-Documentation = "https://github.com/John-FluxTech/co2-eos#readme"
-Issues = "https://github.com/John-FluxTech/co2-eos/issues"
+Homepage = "https://github.com/FluxTech-UG/co2-eos"
+Repository = "https://github.com/FluxTech-UG/co2-eos"
+Documentation = "https://github.com/FluxTech-UG/co2-eos#readme"
+Issues = "https://github.com/FluxTech-UG/co2-eos/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
