@@ -23,18 +23,13 @@ PC = 7377300.0            # Pa
 RHOC_MASS = RHOC_MOLAR * M  # kg/m³ ≈ 467.60
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Residual Helmholtz derivatives (local copy to keep this module standalone)
+# Residual Helmholtz derivatives (analytic, shared with the thermo core)
 # ═══════════════════════════════════════════════════════════════════════════
-# We need αʳ_δ and αʳ_δδ for the conductivity critical enhancement.
-# Import the alphar function and build grads here rather than importing
-# private functions from span_wagner.
-from co2_eos.span_wagner import alpha0, alphar
-
-_dalr_ddelta = jax.grad(alphar, argnums=1)
-_d2alr_ddelta2 = jax.grad(lambda tau, delta: _dalr_ddelta(tau, delta), argnums=1)
-_d2al0_dtau2 = jax.grad(jax.grad(alpha0, argnums=0), argnums=0)
-_d2alr_dtau2 = jax.grad(jax.grad(alphar, argnums=0), argnums=0)
-_d2alr_ddelta_dtau = jax.grad(lambda t, d: _dalr_ddelta(t, d), argnums=0)
+# The conductivity critical enhancement needs αʳ_δ, αʳ_δδ, αʳ_ττ, αʳ_δτ and
+# α⁰_ττ.  We take them from the analytic ``helmholtz`` kernel rather than
+# jax.grad, and let the fused (ρ, u) path pass in the values it already
+# computed at (T, ρ) so the enhancement costs no extra Helmholtz evaluation.
+from co2_eos import helmholtz as _hz
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -166,31 +161,31 @@ _QD = 2.5e9            # 1/m
 _T_REF = 456.19        # K
 
 
-def _lambda_critical(T, rho, mu):
+def _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt):
     """Critical enhancement of thermal conductivity [W/(m·K)].
 
-    Requires viscosity μ [Pa·s] as input (avoids circular dependency).
-    Uses EOS reduced Helmholtz derivatives for compressibility.
+    Takes the reduced residual derivatives αʳ_δ, αʳ_δδ, αʳ_ττ, αʳ_δτ and the
+    ideal α⁰_ττ at (T, ρ) — the caller (thermo kernel or fused (ρ, u) path)
+    has already computed these, so the enhancement adds only the reference-T
+    δ-derivative pair.  μ [Pa·s] is passed in to avoid a circular dependency.
+
+    The reduced derivatives are identical whether δ is formed from molar or
+    mass density (δ = ρ/ρc dimensionless), so the shared values apply directly.
     """
     rho_molar = rho / M
     tau = TC / T
-    delta = rho_molar / RHOC_MOLAR
+    delta = rho_molar / RHOC_MOLAR        # == rho / RHOC_MASS
 
     # ── dp/dρ at (T, ρ) ──
-    alr_d = _dalr_ddelta(tau, delta)
-    alr_dd = _d2alr_ddelta2(tau, delta)
     dp_drho_mol = R_MOLAR * T * (1.0 + 2.0 * delta * alr_d
                                   + delta ** 2 * alr_dd)
-
     chi = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_mol
 
     # ── dp/dρ at reference temperature T_ref (same δ) ──
     tau_ref = TC / _T_REF
-    alr_d_ref = _dalr_ddelta(tau_ref, delta)
-    alr_dd_ref = _d2alr_ddelta2(tau_ref, delta)
+    _, alr_d_ref, _, alr_dd_ref, _, _ = _hz.residual_derivs(tau_ref, delta)
     dp_drho_ref = R_MOLAR * _T_REF * (1.0 + 2.0 * delta * alr_d_ref
                                         + delta ** 2 * alr_dd_ref)
-
     chi_ref = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_ref * _T_REF / T
 
     diff = chi - chi_ref
@@ -200,18 +195,7 @@ def _lambda_critical(T, rho, mu):
     diff_safe = jnp.maximum(diff, 0.0)
     zeta = _ZETA0 * (diff_safe / _GAMMA_CE) ** (_NU / _GAMMA_EXP)
 
-    # ── Molar heat capacities from EOS derivatives ──
-    # Cv/R = -τ²·(α⁰_ττ + αʳ_ττ)
-    # For α⁰_ττ we use the known analytical result for CO₂ ideal gas.
-    # But it's cleaner to compute Cp/Cv ratio from mechanical derivatives.
-    #
-    # Cv_molar = R · (-τ²·(α⁰_ττ + αʳ_ττ))
-    # Cp_molar = Cv_molar + R · (1 + δαʳ_δ - δταʳ_δτ)² / (1 + 2δαʳ_δ + δ²αʳ_δδ)
-
-    al0_tt = _d2al0_dtau2(tau, delta)
-    alr_tt = _d2alr_dtau2(tau, delta)
-    alr_dt = _d2alr_ddelta_dtau(tau, delta)
-
+    # ── Molar heat capacities from the shared EOS derivatives ──
     cv_over_R = -tau ** 2 * (al0_tt + alr_tt)
     num_cp = (1.0 + delta * alr_d - delta * tau * alr_dt) ** 2
     den_cp = 1.0 + 2.0 * delta * alr_d + delta ** 2 * alr_dd
@@ -245,13 +229,29 @@ def _lambda_critical(T, rho, mu):
 
 # ── Scalar thermal conductivity ──────────────────────────────────────────
 
+def _thermal_conductivity_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt,
+                                 al0_tt):
+    """λ [W/(m·K)] reusing reduced derivatives already computed at (T, ρ).
+
+    Used by the fused (ρ, u) path so the conductivity costs no extra Helmholtz
+    evaluation beyond the reference-T δ-derivatives.
+    """
+    lam0 = _lambda_dilute(T)
+    lam_res = _lambda_residual(T, rho)
+    lam_crit = _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt,
+                                       alr_dt, al0_tt)
+    return lam0 + lam_res + lam_crit
+
+
 def _scalar_thermal_conductivity(T, rho):
     """Thermal conductivity λ [W/(m·K)] at scalar (T, ρ [kg/m³])."""
     mu = _scalar_viscosity(T, rho)
-    lam0 = _lambda_dilute(T)
-    lam_res = _lambda_residual(T, rho)
-    lam_crit = _lambda_critical(T, rho, mu)
-    return lam0 + lam_res + lam_crit
+    tau = TC / T
+    delta = rho / RHOC_MASS
+    _, alr_d, _, alr_dd, alr_tt, alr_dt = _hz.residual_derivs(tau, delta)
+    _, _, al0_tt = _hz.ideal_derivs(tau, delta)
+    return _thermal_conductivity_shared(T, rho, mu, alr_d, alr_dd, alr_tt,
+                                        alr_dt, al0_tt)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

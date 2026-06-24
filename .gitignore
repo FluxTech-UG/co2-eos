@@ -8,3 +8,4 @@ build/
 *.egg
 .venv/
 .DS_Store
+gpu-results/
