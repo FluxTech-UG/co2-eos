@@ -36,10 +36,15 @@ jobs:
       - name: Build sdist + wheel
         run: python -m build
 
-      - name: Verify co2_eos/data/saturation_table.npz is in the wheel
+      - name: Verify the data tables are in the wheel
         run: |
           unzip -l dist/*.whl | tee /tmp/wheel_contents.txt
+          # Both are runtime dependencies: the saturation table backs the
+          # phase-aware inversions, and the seed table backs the fixed-iteration
+          # (ρ, u) → T Newton (without it the inversion would not converge to the
+          # round-trip tolerance in the configured iteration count).
           grep -q "co2_eos/data/saturation_table.npz" /tmp/wheel_contents.txt
+          grep -q "co2_eos/data/seed_table.npz" /tmp/wheel_contents.txt
 
       - uses: actions/upload-artifact@v4
         with:
