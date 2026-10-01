@@ -2,6 +2,34 @@
 
 All notable changes to co2-eos are documented here.
 
+## [0.3.1] — 2026-10-01
+
+Bug fix: `density_from_PT` under the auto hint returned a root from inside the
+two-phase dome for subcritical temperatures within 10 K of T_c and pressures in
+the near-critical box (294.15 K, 8.12 MPa gave 499 kg/m³ against the
+compressed-liquid 821; 296.15 K, 6.5 MPa gave 491 against 755). No API change.
+
+### Fixed
+
+- **`_initial_guess` below T_c follows P against P_sat(T).** The auto seed had
+  used a `T < T_c − 10 K` liquid guard, then the critical density inside the
+  near-critical box, then the ideal-gas density: both of the latter sit inside
+  the dome, where the Span-Wagner isotherm loops between the spinodals (at
+  294 K it reaches 12 MPa near 550 kg/m³) and carries roots with ∂P/∂ρ > 0 and
+  zero residual. The seed is now ρ_l(T) for P ≥ P_sat(T) and ρ_v(T) otherwise.
+- **The bisection fallback brackets the stable branch** below T_c
+  (`_bisection_bracket`: [ρ_l(T)(1 − 1e-4), 1200] on the liquid side,
+  [1, ρ_v(T)(1 + 1e-4)] on the vapor side) instead of the whole [1, 1200]
+  range, on which the isotherm is not monotone.
+- **A branch guard** (`_on_requested_branch`) returns NaN, the package's
+  failure signal, if an auto-hint solve below T_c still lands on the wrong
+  side of the saturation densities. Explicit LIQUID/VAPOR hints are the
+  caller's assertion and are not checked.
+- New `tests/test_density_from_PT_branch.py`: the regression points, a sweep
+  of 22 subcritical temperatures on both sides of the dome against CoolProp
+  (rtol 1e-8; measured worst 1.5e-12), jit/vmap with mixed hints, the
+  gradient at the old hole, and the guard itself.
+
 ## [0.3.0] — 2026-07-03
 
 Performance release: the `(ρ, u)` hot path is **2.6× faster at N = 64 and

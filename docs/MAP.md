@@ -240,37 +240,41 @@ _Thermodynamic inversions — pure JAX, JIT-compilable, vmappable,_
 - const SUPERCRITICAL  ·L37
 - const MAX_ITER  ·L40
 - const TOL  ·L41
-- _initial_guess(T, P, phase_hint)  ·L57 — Return an initial density guess based on phase_hint.
-- _safe_denom(x, eps=1e-30)  ·L102 — Guard a denominator: preserve sign for small values, fall back to +eps for NaN.
-- _halley_body(state)  ·L112 — One Halley step (Householder order 2) for cubic convergence.
-- _halley_cond(state)  ·L136 — Continue while not converged and under max iterations.
-- const _BISECT_LO  ·L144
-- const _BISECT_HI  ·L145
-- const _BISECT_ITERS  ·L146
-- _bisection_body(state)  ·L149 — One bisection step on f(ρ) = P(T,ρ) − P_target.
-- _bisection_cond(state)  ·L168
-- _bisection_solve(T, P)  ·L173 — Bisection solve for ρ given (T, P). Scalar inputs. Bounds [1, 1200] kg/m³.
-- _solve_density(T, P, phase_hint)  ·L181 — Halley solve for ρ given (T, P, phase_hint), with bisection fallback. Scalar inputs.
-- @jax.custom_jvp _density_from_PT(T, P, phase_hint)  ·L206 — Find ρ such that P(T,ρ) = P_target. Scalar inputs.
-- @_density_from_PT.defjvp _density_from_PT_jvp(primals, tangents)  ·L221 — JVP via implicit function theorem.
-- @jax.jit density_from_PT(T, P, phase_hint)  ·L243 — Find ρ [kg/m³] such that P(T,ρ) = P_target.
-- _initial_guess_Ph(P, h, phase_hint)  ·L268 — Estimate (T, ρ) from (P, h) for the 2D Newton solver.
-- _newton_body_2d(state)  ·L337 — One 2D Newton step on F = [P(T,ρ) - P_target, h(T,ρ) - h_target].
-- _newton_cond_2d(state)  ·L377 — Continue while not converged and under max iterations.
-- _solve_state_Ph(P, h, phase_hint)  ·L383 — 2D Newton solve for (T, ρ) given (P, h, phase_hint). Scalar inputs.
-- @jax.custom_jvp _state_from_Ph(P, h, phase_hint)  ·L396 — Find (T, ρ) such that P(T,ρ) = P and h(T,ρ) = h. Scalar inputs.
-- @_state_from_Ph.defjvp _state_from_Ph_jvp(primals, tangents)  ·L438 — JVP via implicit function theorem on F(T,ρ; P,h) = 0.
-- @jax.jit state_from_Ph(P, h, phase_hint)  ·L500 — Find (T [K], ρ [kg/m³]) such that P(T,ρ) = P and h(T,ρ) = h.
-- _initial_guess_Du(rho, u)  ·L525 — Estimate T from (ρ, u) using u ≈ Cv_approx * R * T.
-- _newton_body_Du(state)  ·L536 — One Newton step: T_{n+1} = T_n - f(T)/f'(T) where f = u(T,ρ) - u_target.
-- _newton_cond_Du(state)  ·L551 — Continue while not converged and under max iterations.
-- _solve_temperature_Du(rho, u, phase_hint)  ·L557 — Newton solve for T given (ρ, u, phase_hint). Scalar inputs.
-- @jax.custom_jvp _temperature_from_Du(rho, u, phase_hint)  ·L569 — Find T such that u(T, ρ) = u_target at fixed ρ. Scalar inputs.
-- @_temperature_from_Du.defjvp _temperature_from_Du_jvp(primals, tangents)  ·L584 — JVP via implicit function theorem.
-- @jax.jit temperature_from_Du(rho, u, phase_hint)  ·L606 — Find T [K] such that u(T, ρ) = u_target at fixed ρ.
-- @jax.custom_jvp _state_from_Du(rho, u, phase_hint)  ·L628 — Find (T, P, h) given (ρ, u). Scalar inputs.
-- @_state_from_Du.defjvp _state_from_Du_jvp(primals, tangents)  ·L648 — JVP via implicit differentiation + chain rule.
-- @jax.jit state_from_Du(rho, u, phase_hint)  ·L676 — Find (T [K], P [Pa], h [J/kg]) given (ρ, u) at fixed density.
+- _subcritical_branch(T, P)  ·L57 — Which stable branch a (T, P) state below TC lies on, and its bracket.
+- _initial_guess(T, P, phase_hint)  ·L74 — Return an initial density guess based on phase_hint.
+- _safe_denom(x, eps=1e-30)  ·L115 — Guard a denominator: preserve sign for small values, fall back to +eps for NaN.
+- _halley_body(state)  ·L125 — One Halley step (Householder order 2) for cubic convergence.
+- _halley_cond(state)  ·L149 — Continue while not converged and under max iterations.
+- const _BISECT_LO  ·L157
+- const _BISECT_HI  ·L158
+- const _BISECT_ITERS  ·L159
+- const _BRANCH_TOL  ·L160
+- _bisection_body(state)  ·L163 — One bisection step on f(ρ) = P(T,ρ) − P_target.
+- _bisection_cond(state)  ·L181
+- _bisection_bracket(T, P, phase_hint)  ·L186 — Density bracket [lo, hi] on which P(T, ρ) is monotone for this state.
+- _bisection_solve(T, P, lo=_BISECT_LO, hi=_BISECT_HI)  ·L209 — Bisection solve for ρ given (T, P) on [lo, hi]. Scalar inputs.
+- _on_requested_branch(T, P, rho, phase_hint)  ·L218 — Under the auto hint below TC, is the converged root on the stable branch?
+- _solve_density(T, P, phase_hint)  ·L235 — Halley solve for ρ given (T, P, phase_hint), with bisection fallback. Scalar inputs.
+- @jax.custom_jvp _density_from_PT(T, P, phase_hint)  ·L266 — Find ρ such that P(T,ρ) = P_target. Scalar inputs.
+- @_density_from_PT.defjvp _density_from_PT_jvp(primals, tangents)  ·L281 — JVP via implicit function theorem.
+- @jax.jit density_from_PT(T, P, phase_hint)  ·L303 — Find ρ [kg/m³] such that P(T,ρ) = P_target.
+- _initial_guess_Ph(P, h, phase_hint)  ·L328 — Estimate (T, ρ) from (P, h) for the 2D Newton solver.
+- _newton_body_2d(state)  ·L397 — One 2D Newton step on F = [P(T,ρ) - P_target, h(T,ρ) - h_target].
+- _newton_cond_2d(state)  ·L437 — Continue while not converged and under max iterations.
+- _solve_state_Ph(P, h, phase_hint)  ·L443 — 2D Newton solve for (T, ρ) given (P, h, phase_hint). Scalar inputs.
+- @jax.custom_jvp _state_from_Ph(P, h, phase_hint)  ·L456 — Find (T, ρ) such that P(T,ρ) = P and h(T,ρ) = h. Scalar inputs.
+- @_state_from_Ph.defjvp _state_from_Ph_jvp(primals, tangents)  ·L498 — JVP via implicit function theorem on F(T,ρ; P,h) = 0.
+- @jax.jit state_from_Ph(P, h, phase_hint)  ·L560 — Find (T [K], ρ [kg/m³]) such that P(T,ρ) = P and h(T,ρ) = h.
+- _initial_guess_Du(rho, u)  ·L585 — Estimate T from (ρ, u) using u ≈ Cv_approx * R * T.
+- _newton_body_Du(state)  ·L596 — One Newton step: T_{n+1} = T_n - f(T)/f'(T) where f = u(T,ρ) - u_target.
+- _newton_cond_Du(state)  ·L611 — Continue while not converged and under max iterations.
+- _solve_temperature_Du(rho, u, phase_hint)  ·L617 — Newton solve for T given (ρ, u, phase_hint). Scalar inputs.
+- @jax.custom_jvp _temperature_from_Du(rho, u, phase_hint)  ·L629 — Find T such that u(T, ρ) = u_target at fixed ρ. Scalar inputs.
+- @_temperature_from_Du.defjvp _temperature_from_Du_jvp(primals, tangents)  ·L644 — JVP via implicit function theorem.
+- @jax.jit temperature_from_Du(rho, u, phase_hint)  ·L666 — Find T [K] such that u(T, ρ) = u_target at fixed ρ.
+- @jax.custom_jvp _state_from_Du(rho, u, phase_hint)  ·L688 — Find (T, P, h) given (ρ, u). Scalar inputs.
+- @_state_from_Du.defjvp _state_from_Du_jvp(primals, tangents)  ·L708 — JVP via implicit differentiation + chain rule.
+- @jax.jit state_from_Du(rho, u, phase_hint)  ·L736 — Find (T [K], P [Pa], h [J/kg]) given (ρ, u) at fixed density.
 
 ### co2_eos/saturation.py
 _CO2 saturation curve lookups — pure JAX, JIT-compilable._
@@ -461,6 +465,18 @@ _The hand-coded analytic Helmholtz derivatives must match jax.grad._
 - test_residual_derivs_match_autodiff()  ·L47
 - test_ideal_derivs_match_autodiff()  ·L64
 - test_fast_tau_path_matches_full()  ·L78 — The δ-precomputed Newton inner-loop path equals the full bundle.
+
+### tests/test_density_from_PT_branch.py
+_density_from_PT below TC must land on the stable branch under the auto hint._
+- const CP  ·L32
+- const RTOL  ·L34
+- _ref(T, P)  ·L37
+- @pytest.mark.parametrize test_regression_points_match_liquid_hint_and_coolprop(T, P)  ·L49
+- _subcritical_grid()  ·L59
+- @pytest.mark.parametrize test_auto_hint_follows_P_sat_below_TC(T, P, side)  ·L69
+- test_jit_vmap_mixed_hints()  ·L83
+- test_gradient_on_the_liquid_branch_near_the_old_hole()  ·L94
+- test_branch_guard_rejects_a_dome_root_under_auto_only()  ·L103
 
 ### tests/test_dome_detection.py
 _Tests for two-phase dome detection in state_from_Ph._

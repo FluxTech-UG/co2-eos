@@ -54,6 +54,23 @@ _du_drho = jax.grad(sw._scalar_internal_energy, argnums=1)
 
 # ── Phase-aware initial guess ─────────────────────────────────────────────
 
+def _subcritical_branch(T, P):
+    """Which stable branch a (T, P) state below TC lies on, and its bracket.
+
+    Below TC the Span-Wagner isotherm is an analytic continuation through the
+    dome: it loops between the spinodals and can swing far above P_sat (at
+    294 K it reaches 12 MPa near 550 kg/m³), so P(T, ρ) = P_target has spurious
+    roots inside the dome for any P_target below that swing. The only way to
+    pick the physical root is by P against P_sat(T): P ≥ P_sat is compressed
+    liquid, ρ ≥ ρ_l(T); P < P_sat is vapor, ρ ≤ ρ_v(T). Returns
+    (liquid_side, rho_l_T, rho_v_T); the saturation table is used only where
+    T < TC, so its behaviour above TC does not matter here.
+    """
+    rho_l_T, rho_v_T = sat.saturation_densities(T)
+    liquid_side = P >= sat.saturation_pressure(T)
+    return liquid_side, rho_l_T, rho_v_T
+
+
 def _initial_guess(T, P, phase_hint):
     """Return an initial density guess based on phase_hint.
 
@@ -61,10 +78,7 @@ def _initial_guess(T, P, phase_hint):
     Uses jnp.where for JIT traceability.
     """
     subcritical_T = T < sw.TC
-
-    # T-based saturation densities — good for compressed liquid (rho_l at T)
-    # and low-pressure vapor (rho_v at T)
-    rho_l_T, rho_v_T = sat.saturation_densities(T)
+    liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
 
     # Liquid: saturation liquid density at T (good for compressed liquid),
     # fall back to 2*RHOC for supercritical T
@@ -72,23 +86,22 @@ def _initial_guess(T, P, phase_hint):
     # Vapor: saturation vapor density at T, fall back to ideal gas
     ideal_gas_rho = P / (sw.R * T)
     vapor_guess = jnp.where(subcritical_T, rho_v_T, ideal_gas_rho)
-    # Supercritical: pressure-aware guess near the critical region.
-    # Near PC and TC, use RHOC. Otherwise, vapor-like (P < PC) uses ideal gas,
-    # liquid-like (P > 1.5*PC) uses 2*RHOC.
-    # When T is well below TC (liquid-like regardless of pressure), use
-    # saturated liquid density at T — same logic as the LIQUID branch.
+    # Auto, T >= TC: the isotherm is monotone, so any pressure-aware seed
+    # converges. Near PC and TC use RHOC; liquid-like (P > 1.5*PC) 2*RHOC;
+    # otherwise ideal gas.
     near_critical = jnp.logical_and(
         jnp.abs(P - sw.PC) < 0.2 * sw.PC,
         jnp.abs(T - sw.TC) < 15.0,
     )
-    clearly_liquid = T < sw.TC - 10.0
-    sc_guess = jnp.where(
-        clearly_liquid, rho_l_T,
-        jnp.where(
-            near_critical, sw.RHOC,
-            jnp.where(P > 1.5 * sw.PC, 2.0 * sw.RHOC, ideal_gas_rho)
-        )
+    sc_guess_above_TC = jnp.where(
+        near_critical, sw.RHOC,
+        jnp.where(P > 1.5 * sw.PC, 2.0 * sw.RHOC, ideal_gas_rho)
     )
+    # Auto, T < TC: seed on the stable branch P_sat(T) selects. A seed inside
+    # the dome (RHOC, or the ideal-gas density) lands Halley on a spurious
+    # root of the isotherm's loop, with dP/dρ > 0 and no sign of trouble.
+    sc_guess_below_TC = jnp.where(liquid_side, rho_l_T, rho_v_T)
+    sc_guess = jnp.where(subcritical_T, sc_guess_below_TC, sc_guess_above_TC)
 
     rho0 = jnp.where(
         phase_hint == LIQUID, liquid_guess,
@@ -144,16 +157,16 @@ def _halley_cond(state):
 _BISECT_LO = 1.0       # kg/m³ — lower bound
 _BISECT_HI = 1200.0    # kg/m³ — upper bound
 _BISECT_ITERS = 60      # ~10⁻¹⁸ relative precision
+_BRANCH_TOL = 1e-4      # relative slack around ρ_l(T), ρ_v(T) for the branch tests
 
 
 def _bisection_body(state):
     """One bisection step on f(ρ) = P(T,ρ) − P_target.
 
-    Monotonicity assumption: P(T,ρ) is monotonically increasing in ρ for
-    single-phase stable fluid (∂P/∂ρ > 0).  This does NOT hold inside the
-    spinodal (unstable) region, but that's fine — the bisection is a safety
-    net for near-critical supercritical states where Halley oscillates, not
-    for subcritical dome-crossing (handled by dome detection in state_from_Ph).
+    Monotonicity assumption: P(T,ρ) is monotonically increasing in ρ on the
+    bracket. That holds on any single-phase stable branch (∂P/∂ρ > 0) and
+    fails inside the spinodal loop, so below TC the caller brackets the
+    stable branch (`_bisection_bracket`) instead of the whole [1, 1200] range.
     """
     lo, hi, T, P_target, i = state
     mid = 0.5 * (lo + hi)
@@ -170,16 +183,61 @@ def _bisection_cond(state):
     return jnp.logical_and(i < _BISECT_ITERS, (hi - lo) > 1e-14 * hi)
 
 
-def _bisection_solve(T, P):
-    """Bisection solve for ρ given (T, P). Scalar inputs. Bounds [1, 1200] kg/m³."""
-    init_state = (_BISECT_LO, _BISECT_HI, T, P, jnp.int32(0))
+def _bisection_bracket(T, P, phase_hint):
+    """Density bracket [lo, hi] on which P(T, ρ) is monotone for this state.
+
+    Above TC the whole range. Below TC the stable branch: [ρ_l(T), 1200] on
+    the liquid side, [1, ρ_v(T)] on the vapor side, the side taken from the
+    explicit hint or, under auto, from P against P_sat(T).
+    """
+    subcritical_T = T < sw.TC
+    liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
+    liquid_side = jnp.where(
+        phase_hint == LIQUID, True,
+        jnp.where(phase_hint == VAPOR, False, liquid_side)
+    )
+    # A slack of _BRANCH_TOL keeps the saturation point itself inside the
+    # bracket (the spline carries ~6e-8 relative error) while excluding the
+    # dome interior, whose roots sit tens of percent away.
+    lo = jnp.where(jnp.logical_and(subcritical_T, liquid_side),
+                   rho_l_T * (1.0 - _BRANCH_TOL), _BISECT_LO)
+    hi = jnp.where(jnp.logical_and(subcritical_T, jnp.logical_not(liquid_side)),
+                   rho_v_T * (1.0 + _BRANCH_TOL), _BISECT_HI)
+    return lo, hi
+
+
+def _bisection_solve(T, P, lo=_BISECT_LO, hi=_BISECT_HI):
+    """Bisection solve for ρ given (T, P) on [lo, hi]. Scalar inputs."""
+    init_state = (jnp.asarray(lo, dtype=jnp.float64), jnp.asarray(hi, dtype=jnp.float64),
+                  T, P, jnp.int32(0))
     final_state = jax.lax.while_loop(_bisection_cond, _bisection_body, init_state)
     lo, hi, _, _, _ = final_state
     return 0.5 * (lo + hi)
 
 
+def _on_requested_branch(T, P, rho, phase_hint):
+    """Under the auto hint below TC, is the converged root on the stable branch?
+
+    A root inside the dome satisfies P(T, ρ) = P_target with ∂P/∂ρ > 0 and
+    passes every residual test, so the only check that catches it is its
+    position relative to the saturation densities. Explicit LIQUID/VAPOR hints
+    are the caller's assertion (a metastable request is legitimate) and are
+    not checked.
+    """
+    subcritical_T = T < sw.TC
+    liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
+    on_branch = jnp.where(liquid_side, rho >= rho_l_T * (1.0 - _BRANCH_TOL),
+                          rho <= rho_v_T * (1.0 + _BRANCH_TOL))
+    checked = jnp.logical_and(subcritical_T, phase_hint == SUPERCRITICAL)
+    return jnp.logical_or(jnp.logical_not(checked), on_branch)
+
+
 def _solve_density(T, P, phase_hint):
-    """Halley solve for ρ given (T, P, phase_hint), with bisection fallback. Scalar inputs."""
+    """Halley solve for ρ given (T, P, phase_hint), with bisection fallback. Scalar inputs.
+
+    A root on the wrong side of the dome under the auto hint is returned as
+    NaN, the package's failure signal, never as a number.
+    """
     rho0 = _initial_guess(T, P, phase_hint)
     init_state = (rho0, T, P, jnp.int32(0), jnp.bool_(False))
     final_state = jax.lax.while_loop(_halley_cond, _halley_body, init_state)
@@ -187,17 +245,19 @@ def _solve_density(T, P, phase_hint):
 
     # Bisection safety net — only runs when Halley did not converge
     def _bisect_branch(_):
-        rho_bisect = _bisection_solve(T, P)
+        lo, hi = _bisection_bracket(T, P, phase_hint)
+        rho_bisect = _bisection_solve(T, P, lo, hi)
         bisect_residual = jnp.abs(sw._scalar_pressure(T, rho_bisect) - P)
         bisect_ok = bisect_residual < 1e-3 * jnp.maximum(jnp.abs(P), 1.0)
         return jnp.where(bisect_ok, rho_bisect, jnp.nan)
 
-    return jax.lax.cond(
+    rho = jax.lax.cond(
         converged,
         lambda _: rho_halley,
         _bisect_branch,
         None,
     )
+    return jnp.where(_on_requested_branch(T, P, rho, phase_hint), rho, jnp.nan)
 
 
 # ── Implicit differentiation via custom_jvp ───────────────────────────────
