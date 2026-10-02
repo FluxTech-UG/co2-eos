@@ -200,7 +200,7 @@ Solver design is informed by:
 
 ## Acknowledgements
 
-CO2-EOS was developed by Claude and John Patrick Therrien during research on transcritical CO₂ thermoacoustic engines at FluxTech UG in Berlin. The Helmholtz-first autodiff design was validated against CoolProp and informed by the solver strategies documented in teqp and the CoolProp codebase.
+CO2-EOS was developed by Claude and Patrick John Therrien during research on transcritical CO₂ thermoacoustic engines at FluxTech UG in Berlin. The Helmholtz-first autodiff design was validated against CoolProp and informed by the solver strategies documented in teqp and the CoolProp codebase.
 
 ## License
 

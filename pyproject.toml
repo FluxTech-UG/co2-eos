@@ -12,7 +12,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [
-    { name = "John Patrick Therrien", email = "john@flux-tech.de" },
+    { name = "Patrick John Therrien", email = "john@flux-tech.de" },
 ]
 keywords = ["CO2", "equation-of-state", "thermodynamics", "JAX", "autodiff", "Span-Wagner"]
 classifiers = [
