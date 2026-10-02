@@ -31,8 +31,9 @@ critical point) live in exactly one place and every other site derives from them
 
 **Every property derives from the Helmholtz free energy A(T, ρ).** Pressure, heat
 capacities, speed of sound, and the rest come from the hand-coded analytic
-α-derivatives. They are validated against `jax.grad` to < 3e-12; if they diverge, the
-derivatives are wrong, not the tolerance.
+α-derivatives. They are validated against `jax.grad` by `tests/test_analytic_derivs.py`
+(relative error below 1e-9 for the residual part and 1e-10 for the ideal part); if they
+fail that bar, the derivatives are wrong, not the tolerance.
 
 **CoolProp is a test-only dependency — never reachable from an import of the package.**
 It generates validation data and the offline tables; shipped code never calls it.
