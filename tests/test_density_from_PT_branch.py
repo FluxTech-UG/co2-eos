@@ -56,10 +56,25 @@ def test_regression_points_match_liquid_hint_and_coolprop(T, P):
 
 # ── Both sides of the dome, every subcritical temperature ───────────────────
 
+# Melting pressure of CO2, Span & Wagner (1996) melting-pressure equation:
+# p_m / p_t = 1 + a1 (T/T_t - 1) + a2 (T/T_t - 1)^2. Above p_m(T) the stable
+# phase is solid, outside the fluid EOS, and CoolProp 8 refuses the state
+# (220 K melts at 16.7 MPa), so the liquid side of the grid stops below it.
+_T_TRIPLE, _P_TRIPLE = 216.592, 0.51795e6
+_MELT_A1, _MELT_A2 = 1955.5390, 2055.4593
+_MELT_MARGIN = 0.98   # top liquid point sits 2 % under the melting line
+
+
+def _melting_pressure(T):
+    x = T / _T_TRIPLE - 1.0
+    return _P_TRIPLE * (1.0 + _MELT_A1 * x + _MELT_A2 * x * x)
+
+
 def _subcritical_grid():
     for T in np.linspace(220.0, 304.0, 22):
         P_sat = CP.PropsSI("P", "T", T, "Q", 0, "CO2")
-        for P in np.geomspace(P_sat * 1.0005, 30e6, 8):
+        P_top = min(30e6, _MELT_MARGIN * _melting_pressure(T))
+        for P in np.geomspace(P_sat * 1.0005, P_top, 8):
             yield T, P, "liquid"
         for P in np.geomspace(0.1e6, P_sat * 0.9995, 5):
             yield T, P, "vapor"

@@ -472,11 +472,13 @@ _density_from_PT below TC must land on the stable branch under the auto hint._
 - const RTOL  ·L34
 - _ref(T, P)  ·L37
 - @pytest.mark.parametrize test_regression_points_match_liquid_hint_and_coolprop(T, P)  ·L49
-- _subcritical_grid()  ·L59
-- @pytest.mark.parametrize test_auto_hint_follows_P_sat_below_TC(T, P, side)  ·L69
-- test_jit_vmap_mixed_hints()  ·L83
-- test_gradient_on_the_liquid_branch_near_the_old_hole()  ·L94
-- test_branch_guard_rejects_a_dome_root_under_auto_only()  ·L103
+- const _MELT_MARGIN  ·L65
+- _melting_pressure(T)  ·L68
+- _subcritical_grid()  ·L73
+- @pytest.mark.parametrize test_auto_hint_follows_P_sat_below_TC(T, P, side)  ·L84
+- test_jit_vmap_mixed_hints()  ·L98
+- test_gradient_on_the_liquid_branch_near_the_old_hole()  ·L109
+- test_branch_guard_rejects_a_dome_root_under_auto_only()  ·L118
 
 ### tests/test_dome_detection.py
 _Tests for two-phase dome detection in state_from_Ph._
