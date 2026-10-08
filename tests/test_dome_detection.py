@@ -23,7 +23,7 @@ from co2_eos import span_wagner as sw
 from co2_eos import saturation as sat
 
 
-P_TEST = 7.1e6  # Pa — subcritical, well inside dome range
+P_TEST = 7.1e6  # Pa, subcritical, well inside dome range
 
 
 @pytest.fixture
@@ -195,7 +195,7 @@ class TestDomeSupercriticalBypass:
         """state_from_Ph at P > PC should behave exactly as before."""
         P = jnp.float64(10.0e6)  # supercritical
         T_ref = 320.0
-        rho_ref = sw._scalar_pressure  # dummy — compute h from known state
+        rho_ref = sw._scalar_pressure  # dummy; compute h from known state
         from co2_eos.inversions import _density_from_PT
         rho = _density_from_PT(jnp.float64(T_ref), P, SUPERCRITICAL)
         h = sw._scalar_enthalpy(jnp.float64(T_ref), rho)

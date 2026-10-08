@@ -1,4 +1,4 @@
-"""CO₂ transport property correlations — pure JAX implementation.
+"""CO₂ transport property correlations: pure JAX implementation.
 
 Viscosity:            Laesecke & Muzny, JPCRD 46, 013107 (2017)
 Thermal conductivity: Huber, Sykioti, Assael & Perkins, JPCRD 45, 013102 (2016)
@@ -36,10 +36,10 @@ from co2_eos import helmholtz as _hz
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# VISCOSITY — Laesecke & Muzny (2017)
+# VISCOSITY: Laesecke & Muzny (2017)
 # ═══════════════════════════════════════════════════════════════════════════
 
-# ── Dilute gas η₀(T) — Eq. (4) ───────────────────────────────────────────
+# ── Dilute gas η₀(T): Eq. (4) ───────────────────────────────────────────
 _ETA0_A = jnp.array([
     1749.354893188350,
     -369.069300007128,
@@ -85,7 +85,7 @@ def _eta_initial(T, rho_molar, eta0):
 
     η_initial = η₀ · B_η · ρ_molar.  The Rainwater-Friend exponents are all
     multiples of -¼, so every T*^t comes from y = T*^(-¼) (two sqrts and a
-    reciprocal) by a multiply ladder — no pow calls.
+    reciprocal) by a multiply ladder, with no pow calls.
     """
     T_star = T / _EPSILON_OVER_K
     y = 1.0 / jnp.sqrt(jnp.sqrt(T_star))     # T*^(-1/4)
@@ -102,14 +102,14 @@ def _eta_initial(T, rho_molar, eta0):
     return eta0 * B_eta * rho_molar
 
 
-# ── Higher-order (residual) — Eqs. (8)-(9) ───────────────────────────────
-_TT = 216.592       # K — triple-point temperature
-_RHO_TL = 1178.53   # kg/m³ — triple-point saturated liquid density
+# ── Higher-order (residual): Eqs. (8)-(9) ───────────────────────────────
+_TT = 216.592       # K, triple-point temperature
+_RHO_TL = 1178.53   # kg/m³, triple-point saturated liquid density
 _C1 = 0.360603235428487
 _C2 = 0.121550806591497
 _GAMMA_VISC = 8.06282737481277
 
-# Reference viscosity scale η_tL — Eq. (9)
+# Reference viscosity scale η_tL: Eq. (9)
 _ETA_TL = (_RHO_TL ** (2.0 / 3.0)
            * (R_MOLAR * _TT) ** 0.5
            / (M ** (1.0 / 6.0) * 84446887.43579945))
@@ -136,10 +136,10 @@ def _scalar_viscosity(T, rho):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# THERMAL CONDUCTIVITY — Huber et al. (2016)
+# THERMAL CONDUCTIVITY: Huber et al. (2016)
 # ═══════════════════════════════════════════════════════════════════════════
 
-# ── Dilute gas λ₀(T) — Eq. (3) ───────────────────────────────────────────
+# ── Dilute gas λ₀(T): Eq. (3) ───────────────────────────────────────────
 _LAM0_L = jnp.array([0.0151874307, 0.0280674040, 0.0228564190, -0.00741624210])
 
 
@@ -152,7 +152,7 @@ def _lambda_dilute(T):
     return 1.0 / (jnp.sqrt(tau) * poly) / 1000.0  # mW → W
 
 
-# ── Residual λ_res(T, ρ) — polynomial ────────────────────────────────────
+# ── Residual λ_res(T, ρ): polynomial ────────────────────────────────────
 _LAM_RES_B = jnp.array([
     0.0100128,  0.0560488, -0.081162,  0.0624337, -0.0206336, 0.00253248,
     0.00430829, -0.0358563, 0.067148, -0.0522855,  0.0174571, -0.00196414,
@@ -179,7 +179,7 @@ def _lambda_residual(T, rho):
     return out
 
 
-# ── Critical enhancement — simplified Olchowy-Sengers ────────────────────
+# ── Critical enhancement: simplified Olchowy-Sengers ────────────────────
 _KB = 1.3806488e-23    # J/K
 _R0 = 1.02             # CO₂-specific amplitude ratio
 _GAMMA_CE = 0.052      # CO₂-specific
@@ -189,11 +189,11 @@ _ZETA0 = 1.5e-10       # m
 _QD = 2.5e9            # 1/m
 _T_REF = 456.19        # K
 
-# The enhancement needs dp/dρ at the fixed reference temperature — a smooth
+# The enhancement needs dp/dρ at the fixed reference temperature, a smooth
 # function of δ alone.  A precomputed degree-100 Chebyshev fit (3e-13 max rel
 # error over δ ∈ [0, 2.75]; scripts/generate_chi_ref_table.py) replaces the
 # full residual bundle at τ_ref.  Tolerant of a missing file so the generator
-# script can import this package to BUILD the table — the exact bundle is the
+# script can import this package to BUILD the table; the exact bundle is the
 # fallback, so the fallback changes speed only, never values.
 _CHI_PATH = Path(__file__).parent / "data" / "chi_ref_cheb.npz"
 _HAVE_CHI_CHEB = False
@@ -205,7 +205,7 @@ try:
     if float(_chi["t_ref"]) != _T_REF:
         raise ValueError(
             f"chi_ref_cheb.npz was generated for T_ref={float(_chi['t_ref'])},"
-            f" transport uses {_T_REF} — regenerate the table")
+            f" transport uses {_T_REF}: regenerate the table")
     _HAVE_CHI_CHEB = True
 except FileNotFoundError:
     pass
@@ -234,7 +234,7 @@ def _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt):
     """Critical enhancement of thermal conductivity [W/(m·K)].
 
     Takes the reduced residual derivatives αʳ_δ, αʳ_δδ, αʳ_ττ, αʳ_δτ and the
-    ideal α⁰_ττ at (T, ρ) — the caller (thermo kernel or fused (ρ, u) path)
+    ideal α⁰_ττ at (T, ρ); the caller (thermo kernel or fused (ρ, u) path)
     has already computed these, so the enhancement adds only the reference-T
     δ-derivative pair.  μ [Pa·s] is passed in to avoid a circular dependency.
 
@@ -321,7 +321,7 @@ def _scalar_thermal_conductivity(T, rho):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Public API — batched, JIT-compiled
+# Public API: batched, JIT-compiled
 # ═══════════════════════════════════════════════════════════════════════════
 
 @jax.jit

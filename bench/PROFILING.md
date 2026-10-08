@@ -5,16 +5,16 @@ bought. Workload: the consumers' operating envelope (T ∈ [290, 350] K,
 ρ ∈ [60, 700] kg/m³, supercritical near-critical CO₂), float64, batched.
 Scripts in this directory reproduce every number:
 
-- `profile_hotpath.py` — component timing inside the hot path, HLO
+- `profile_hotpath.py`: component timing inside the hot path, HLO
   transcendental census, Newton convergence vs iteration count
-- `compare.py` — v0.1 autodiff baseline vs the current path at N = 64–4096
-- `validate_fastpath.py` — accuracy of every property + derivative vs an
+- `compare.py`: v0.1 autodiff baseline vs the current path at N = 64–4096
+- `validate_fastpath.py`: accuracy of every property + derivative vs an
   independent Span-Wagner oracle chain (report:
   `docs/validation-fastpath-2026-07.md`)
-- `proto_econ.py`, `proto_seed_v2.py`, `proto_chebsurf.py` — the measured
+- `proto_econ.py`, `proto_seed_v2.py`, `proto_chebsurf.py`: the measured
   prototypes behind the current design (incl. the rejected Chebyshev-surface
   surrogate)
-- `seed_study.py`, `fixed_iters_study.py`, `seed_table_study.py` — seed /
+- `seed_study.py`, `fixed_iters_study.py`, `seed_table_study.py`: seed /
   iteration design studies
 
 ## 1. The design
@@ -22,7 +22,7 @@ Scripts in this directory reproduce every number:
 The hot path solves `T(ρ, u)` by a table-seeded, fixed-count, unrolled
 analytic-Cv Newton, then derives every thermodynamic and transport property
 from one shared α-derivative bundle. Three structural facts keep the
-arithmetic cheap — all asserted at import against the Span-Wagner coefficient
+arithmetic cheap: all asserted at import against the Span-Wagner coefficient
 tables (`helmholtz.py`):
 
 1. **Transcendental economization.** Every Span-Wagner τ-exponent is a
@@ -50,7 +50,7 @@ A tensor-spline/Chebyshev surrogate of the whole surface was prototyped and
 inside the operating box and the non-analytic terms defeat spectral
 convergence (α_ττ fit error O(1) at degree 80; smooth-part-only fits top out
 at ~1e-7). Everything shipped is exact re-association or a ≤3e-13 fit of a
-fixed 1-D curve — accuracy budget consumed: round-off.
+fixed 1-D curve. Accuracy budget consumed: round-off.
 
 ## 2. Where the time went (previous analytic path, M2 Pro CPU)
 
@@ -68,7 +68,7 @@ fixed 1-D curve — accuracy budget consumed: round-off.
 The 5 iterations were a seed problem: unconverged unstable-branch nodes in
 the dome interior of the seed table poisoned bilinear cells near the dome
 boundary (a ~5 K seed band exactly in the near-critical approach).
-Single-phase, the tail was fine — the fix (fill dome rows by interpolation)
+Single-phase, the tail was fine; the fix (fill dome rows by interpolation)
 plus doubling the grid dropped the requirement to 3 steps at identical
 accuracy.
 
@@ -121,13 +121,13 @@ flux-compute run --cloud flux-ovh --upload . \
 | 1048576   | 159885 | 33780 | 17165 | **2.0×** | 9.3× |
 
 The inversion alone reaches **63.7×** vs the v0.1 autodiff path at N = 2²⁰
-(2.14 ms for a million points — 2.0 ns/point).
+(2.14 ms for a million points, 2.0 ns/point).
 
 **Reading the GPU numbers:**
 
 - Below N ≈ 4096 the V100S is launch-bound: wall time is flat in N. The
-  economization cut the *floor itself* from ~690 µs to ~330–410 µs — fewer
-  ops means fewer fused kernels — but a floor remains. There is no separate
+  economization cut the *floor itself* from ~690 µs to ~330–410 µs (fewer
+  ops means fewer fused kernels), but a floor remains. There is no separate
   GPU kernel strategy to dispatch to at these sizes; the fix for a
   small-batch RHS is architectural (batch more work per launch), not
   per-backend kernels. The library's branchless fixed-iteration design is
@@ -137,14 +137,14 @@ The inversion alone reaches **63.7×** vs the v0.1 autodiff path at N = 2²⁰
   crossover at N ≈ 700–1000 (was ~128–256). Consumers at N = 64–256 field
   sizes should run this EOS on CPU.
 - At saturation (N = 2²⁰) the GPU runs the full recovery at **16 ns/point**
-  (CPU: ~320 ns/point) — batched evaluation remains where the GPU pays.
+  (CPU: ~320 ns/point); batched evaluation remains where the GPU pays.
 
 ## 5. Accuracy & gradients
 
 Validated against an independent oracle chain (Span-Wagner autodiff +
 literal-formula transport + to-convergence Newton) over 35k single-phase
 envelope samples including the near-critical approach and the 1DSim3 spec
-point — `docs/validation-fastpath-2026-07.md`:
+point (`docs/validation-fastpath-2026-07.md`):
 
 - every property ≤ 1.3e-10 max rel (typical ≤ 1e-12; the max is round-off
   amplification at the near-critical cp divergence);

@@ -2,14 +2,14 @@
 
 Components timed separately (all jitted, vmapped over the batch, float64):
 
-  full        properties_from_rho_u(rho, u)          — the consumer hot path
-  newton      temperature_from_rho_u(rho, u)         — seed + 5 fixed Newton steps
+  full        properties_from_rho_u(rho, u)            the consumer hot path
+  newton      temperature_from_rho_u(rho, u)           seed + 5 fixed Newton steps
   seed        the bilinear (rho, u) -> T0 table seed alone
-  state_Trho  _state_from_T_rho(T, rho)              — thermo + transport at known T
-  thermo      _thermo(T, rho)                        — one full analytic bundle + ideal
-  bundle      residual_derivs(tau, delta)            — the 6-derivative residual bundle
+  state_Trho  _state_from_T_rho(T, rho)                thermo + transport at known T
+  thermo      _thermo(T, rho)                          one full analytic bundle + ideal
+  bundle      residual_derivs(tau, delta)              the 6-derivative residual bundle
   visc        _scalar_viscosity(T, rho)
-  chi_ref     residual_derivs at tau_ref             — the Huber critical-enhancement
+  chi_ref     residual_derivs at tau_ref               the Huber critical-enhancement
                                                        reference bundle (delta-only fn!)
 
 Plus:

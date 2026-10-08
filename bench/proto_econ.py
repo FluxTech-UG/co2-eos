@@ -1,7 +1,7 @@
 """Prototype A/B: transcendental-economized Span-Wagner kernels, measured.
 
-A. `residual_derivs_econ` / `residual_tau_prep_econ` + `residual_tau_fast_econ`
-   — the exact Span-Wagner sums restructured so the transcendental count per
+A. `residual_derivs_econ` / `residual_tau_prep_econ` + `residual_tau_fast_econ`:
+   the exact Span-Wagner sums restructured so the transcendental count per
    point drops from ~150 pow + ~45 exp to ~6 pow + ~12 exp + sqrt ladders:
      * every tau exponent is a multiple of 1/4  -> 2 sqrts + multiply ladder;
      * every delta exponent is a small integer  -> multiply ladder;
@@ -9,7 +9,7 @@ A. `residual_derivs_econ` / `residual_tau_prep_econ` + `residual_tau_fast_econ`
      * the 5 Gaussian exponentials share (eta, beta, gamma) pairwise -> 4;
      * non-analytic terms: one shared theta, two distinct Delta; Delta^(7/8)
        via sqrt ladder; only Delta^0.925, s^(5/3), s^(2/3) remain real pows.
-   Same math, same guards — differences are round-off only.
+   Same math, same guards; differences are round-off only.
 
 B. chi_ref -> precomputed 1-D Chebyshev in delta: the Huber critical
    enhancement's dp/drho|_(T_ref) is a function of delta alone; fit it offline
@@ -36,7 +36,7 @@ from co2_eos import transport as tr
 from co2_eos import core
 import co2_eos
 
-# ── Static coefficient views (Python floats — folded at trace time) ─────────
+# ── Static coefficient views (Python floats, folded at trace time) ─────────
 
 _N = np.asarray(sw._AR_N)
 _D = np.asarray(sw._AR_D).astype(int)
@@ -119,7 +119,7 @@ def _delta_ladder(delta, dmax):
 # ═════════════════════════════════════════════════════════════════════════
 
 def residual_derivs_econ(tau, delta):
-    """(ar, ar_d, ar_t, ar_dd, ar_tt, ar_dt) — exact SW96, economized."""
+    """(ar, ar_d, ar_t, ar_dd, ar_tt, ar_dt): exact SW96, economized."""
     inv_d = 1.0 / delta
     inv_d2 = inv_d * inv_d
     inv_t = 1.0 / tau
@@ -297,7 +297,7 @@ def residual_tau_prep_econ(delta):
 
 
 def residual_tau_fast_econ(tau, dstate):
-    """(ar_t, ar_tt) from precomputed delta-state — economized per-iteration."""
+    """(ar_t, ar_tt) from precomputed delta-state, economized per-iteration."""
     Ct, Cg, s_p, Bsa, e_cs, delta = dstate
     inv_t = 1.0 / tau
     inv_t2 = inv_t * inv_t

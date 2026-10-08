@@ -1,4 +1,4 @@
-"""Redesigned high-performance EOS core — analytic derivatives, fused passes.
+"""Redesigned high-performance EOS core: analytic derivatives, fused passes.
 
 This module is the fast path of co2-eos.  It replaces the ``jax.grad`` chain in
 ``span_wagner`` / ``inversions`` with the hand-coded analytic derivatives in
@@ -13,16 +13,16 @@ volume code makes on every RHS evaluation.
 Design:
   * The Newton inner loop touches only τ-derivatives (`helmholtz.residual_tau_*`)
     with the δ-dependent envelopes precomputed once (they are loop-invariant at
-    fixed ρ) — all u and Cv need at fixed density.
+    fixed ρ): all u and Cv need at fixed density.
   * A precomputed (ρ, u) → T₀ table (dome-safe, uniform grid) seeds Newton so
     that a short FIXED, unrolled iteration (no `lax.while_loop`) reaches
-    float64 round-off — measured 8.5e-13 K max over the single-phase envelope
+    float64 round-off, measured 8.5e-13 K max over the single-phase envelope
     at 3 steps.  Fixed iteration keeps the GPU kernel uniform and branchless;
     the table seed is purely a convergence accelerator (the polish sets
     accuracy and the IFT JVP sets gradients), so it carries no accuracy or
     differentiability risk.
   * Gradients use the implicit function theorem via `custom_jvp`, with the
-    Jacobian entries (Cv, ∂u/∂ρ) taken analytically — correct jvp and vjp.
+    Jacobian entries (Cv, ∂u/∂ρ) taken analytically, giving correct jvp and vjp.
 
 All functions are scalar in (T, ρ) / (ρ, u); the public wrappers in
 ``__init__`` vmap them over a batch.
@@ -56,7 +56,7 @@ _T_MAX = 800.0
 # ═══════════════════════════════════════════════════════════════════════════
 # Loaded eagerly at import (outside any JIT trace) so the arrays are captured as
 # constants.  Tolerant of a missing file so scripts/generate_seed_table.py can
-# import this module to BUILD the table — in that case the affine fallback seed
+# import this module to BUILD the table; in that case the affine fallback seed
 # is used (the table is never needed to evaluate u/Cv).
 
 _SEED_PATH = Path(__file__).parent / "data" / "seed_table.npz"
@@ -68,14 +68,14 @@ try:
     _seed = np.load(_SEED_PATH)
     # Stored float32 (seed-only precision; halves the embedded-constant
     # footprint, which XLA:CPU gathers care about).  Kept flat so the four
-    # bilinear corners come from ONE gather of (base + static offsets) —
+    # bilinear corners come from ONE gather of (base + static offsets):
     # four separate gather ops cost ~1.3 µs each per call.
     _SEED_T0_FLAT = jnp.asarray(_seed["T0_table"], dtype=jnp.float32).ravel()
     _np_rho = np.asarray(_seed["rho_grid"])
     _np_u = np.asarray(_seed["u_grid"])
     _SEED_NRHO = int(_np_rho.shape[0])
     _SEED_NU = int(_np_u.shape[0])
-    # The grids are uniform (linspace) — index by arithmetic, not searchsorted.
+    # The grids are uniform (linspace): index by arithmetic, not searchsorted.
     _SEED_R_LO = float(_np_rho[0])
     _SEED_R_STEP = float(_np_rho[1] - _np_rho[0])
     _SEED_U_LO = float(_np_u[0])
@@ -92,7 +92,7 @@ def _seed_T(rho, u):
     """Initial T guess for the (ρ, u) inversion via the bilinear table.
 
     Uniform-grid direct indexing (the generator writes linspace grids), with
-    the query clamped to the table box — outside it the Newton polish still
+    the query clamped to the table box; outside it the Newton polish still
     owns the accuracy, the seed is only a starting point.
     """
     if not _HAVE_SEED:

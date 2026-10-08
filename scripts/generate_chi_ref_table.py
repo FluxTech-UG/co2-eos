@@ -6,7 +6,7 @@ compressibility factor at the fixed reference temperature T_ref = 456.19 K:
 
     f(δ) = 1 + 2δ·αʳ_δ(τ_ref, δ) + δ²·αʳ_δδ(τ_ref, δ)
 
-— a smooth function of δ alone (τ_ref is a constant).  Evaluating the full
+is a smooth function of δ alone (τ_ref is a constant).  Evaluating the full
 6-derivative residual bundle at τ_ref per point was ~20 % of the fused hot
 path; a degree-100 Chebyshev fit reproduces f to 3e-13 max relative error over
 δ ∈ [0, 2.75] (ρ up to ~1286 kg/m³, beyond the inversion bisection bound) and
@@ -27,7 +27,7 @@ jax.config.update("jax_enable_x64", True)
 from co2_eos import span_wagner as sw
 from co2_eos import helmholtz as hz
 
-T_REF = 456.19            # K — Huber et al. (2016); must match transport._T_REF
+T_REF = 456.19            # K, Huber et al. (2016); must match transport._T_REF
 DELTA_LO, DELTA_HI = 0.0, 2.75
 DEGREE = 100
 

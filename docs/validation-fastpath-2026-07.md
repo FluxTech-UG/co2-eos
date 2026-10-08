@@ -15,7 +15,7 @@ code with it**: temperature recovered by a to-convergence while-loop Newton
 Laesecke-Muzny / Huber formulas with plain `pow`, chi_ref via oracle
 autodiff. Reference derivatives are assembled by the implicit function
 theorem from oracle partials (`dq/du|ρ = q_T/cv`,
-`dq/dρ|u = q_ρ − q_T·u_ρ/cv`) — not finite differences — so the comparison
+`dq/dρ|u = q_ρ − q_T·u_ρ/cv`), not finite differences, so the comparison
 floor is round-off, not FD noise.
 
 ## Envelope
@@ -68,7 +68,7 @@ it consumes is round-off-level:
   worst point, ≥ 3–6 orders everywhere else**.
 
 Because nothing is fitted on the surface itself (the two precomputed
-artifacts — seed table and chi_ref Chebyshev — are a convergence
+artifacts, the seed table and the chi_ref Chebyshev, are a convergence
 accelerator and a 2.8e-13 fit of a fixed 1-D curve), the fast path **is**
 the default; the `span_wagner` autodiff implementation stays in the repo as
 the reference oracle and test truth. There is no accuracy/speed switch to
@@ -78,7 +78,7 @@ A tensor-spline / Chebyshev surrogate of the full surface was prototyped
 and rejected with measurements (`bench/proto_chebsurf.py`): with the
 critical point inside the operating box, the non-analytic terms defeat
 spectral convergence (α_ττ error O(1) at degree 80), and a smooth-part-only
-fit tops out at ~1e-7..1e-8 — consistent with the published near-critical
+fit tops out at ~1e-7..1e-8, consistent with the published near-critical
 accuracy collapse of SBTL/TTSE-class table methods.
 
 ## CI guardrails (tests/test_fastpath_validation.py)

@@ -1,9 +1,9 @@
 """Prototype D probe: can a tensor-Chebyshev surface replace the residual sum?
 
 Fits 2-D tensor Chebyshev expansions of alpha^r over the consumers' envelope
-(tau in [Tc/350, Tc/290], delta in [60,700]/rhoc — the critical point (1,1) is
+(tau in [Tc/350, Tc/290], delta in [60,700]/rhoc; the critical point (1,1) is
 INSIDE this box) and measures max relative error of the fitted second
-derivatives (alpha_tt, alpha_dd — what Cv / sound speed need) on a dense grid.
+derivatives (alpha_tt, alpha_dd: what Cv / sound speed need) on a dense grid.
 Also fits the smooth part alone (poly+exp+gauss, non-analytic terms excluded)
 to locate the wall.
 
@@ -39,7 +39,7 @@ def alphar_parts(tau, delta):
     full = hz.residual_derivs(tau, delta)
 
     # smooth part: subtract the non-analytic contribution by evaluating the
-    # NA terms via span_wagner's building blocks — easiest: full minus NA,
+    # NA terms via span_wagner's building blocks; easiest: full minus NA,
     # where NA comes from autodiff of the NA-only sum.
     def na_only(t, d):
         dm1 = d - 1.0

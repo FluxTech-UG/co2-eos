@@ -1,4 +1,4 @@
-"""CO2 saturation curve lookups — pure JAX, JIT-compilable.
+"""CO2 saturation curve lookups: pure JAX, JIT-compilable.
 
 Loads a precomputed saturation table (cubic spline coefficients) generated
 by scripts/generate_saturation_table.py from the Span-Wagner EOS.
@@ -77,7 +77,7 @@ def saturation_densities(T):
     """Saturated liquid and vapor densities [kg/m3] at temperature T [K].
 
     Returns:
-        (rho_l, rho_v) — liquid and vapor densities
+        (rho_l, rho_v): liquid and vapor densities
     """
     _ensure_loaded()
     rho_l = _eval_spline(T, _TABLE['T_breaks'], _TABLE['rho_l_c'])

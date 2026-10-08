@@ -48,7 +48,7 @@ _CP_KEYS = {
 # Default rtol is 1e-12 (machine precision for double-precision Span-Wagner).
 # Where a (region, quantity) cell needs to be looser, it gets its own entry
 # with the empirical worst case in the comment. The relaxed value is ~2-3×
-# the observed max, never just padded — so a real regression still trips.
+# the observed max, never just padded, so a real regression still trips.
 
 _DEFAULT_RTOL = 1e-12
 

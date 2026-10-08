@@ -12,7 +12,7 @@ import co2_eos as co2
 import jax, jax.numpy as jnp
 
 # Simulation hot path: full state from the conserved variables (ρ, u).
-# Batched/array-native — solves T once and reuses the α-derivatives for
+# Batched/array-native: solves T once and reuses the α-derivatives for
 # every property. This is the call a finite-volume code makes each RHS eval.
 rho = jnp.array([300.0, 350.0, 420.0])      # kg/m³
 u   = jnp.array([3.62e5, 3.58e5, 3.42e5])   # J/kg  (specific internal energy)
@@ -49,7 +49,7 @@ But CoolProp is a C++ library with Python bindings. You can't `jax.grad` through
 CO2-EOS solves this for CO₂ by implementing the same reference EOS (Span-Wagner 1996) directly in JAX:
 
 - **Differentiable.** `jax.grad` through any property, any inversion, any combination. No finite differences. The inversions carry hand-written `custom_jvp` rules (implicit function theorem), so forward- and reverse-mode gradients are exact and cheap; validated against central finite differences.
-- **Fast.** JIT-compiled and vectorisable, with hand-coded, transcendental-economized analytic α-derivatives: the Span-Wagner exponent structure (¼-integer τ-powers, integer δ-powers, shared exponential envelopes) is evaluated by sqrt/multiply ladders, so a full six-derivative bundle costs ~12 exps + 3 pows per point instead of ~150 array-exponent pows — the same arithmetic, re-associated, exact to round-off. For simulation codes that carry `(ρ, u)` as conserved variables, `properties_from_rho_u` fuses the whole primitive recovery: a dome-safe table seed plus three unrolled analytic-Cv Newton steps recover `T(ρ, u)` to 1e-12 K, and one shared derivative bundle feeds every property including the transport critical enhancement. On an Apple M2 Pro (float64) the full recovery runs **123 µs for a 64-point batch and 0.53 µs/point at large batches — 7.6–19.9× faster than the v0.1 autodiff path** and 2.6–6.3× faster than v0.2. On an OVH Tesla V100S the inversion reaches **63.7×** vs v0.1 at a 2²⁰-point batch (2 ns/point; full recovery 16 ns/point), and the launch-latency floor at small batches dropped ~1.7× (`bench/compare.py`, `bench/PROFILING.md`, validation in `docs/validation-fastpath-2026-07.md`).
+- **Fast.** JIT-compiled and vectorisable, with hand-coded, transcendental-economized analytic α-derivatives: the Span-Wagner exponent structure (¼-integer τ-powers, integer δ-powers, shared exponential envelopes) is evaluated by sqrt/multiply ladders, so a full six-derivative bundle costs ~12 exps + 3 pows per point instead of ~150 array-exponent pows: the same arithmetic, re-associated, exact to round-off. For simulation codes that carry `(ρ, u)` as conserved variables, `properties_from_rho_u` fuses the whole primitive recovery: a dome-safe table seed plus three unrolled analytic-Cv Newton steps recover `T(ρ, u)` to 1e-12 K, and one shared derivative bundle feeds every property including the transport critical enhancement. On an Apple M2 Pro (float64) the full recovery runs **123 µs for a 64-point batch and 0.53 µs/point at large batches, 7.6–19.9× faster than the v0.1 autodiff path** and 2.6–6.3× faster than v0.2. On an OVH Tesla V100S the inversion reaches **63.7×** vs v0.1 at a 2²⁰-point batch (2 ns/point; full recovery 16 ns/point), and the launch-latency floor at small batches dropped ~1.7× (`bench/compare.py`, `bench/PROFILING.md`, validation in `docs/validation-fastpath-2026-07.md`).
 - **Also fast for `(P, T)`.** The `state_from_PT` workflow that mirrors `PropsSI` includes an iterative density solve and flattens to a few tens of microseconds per point at large batches, roughly 2.7× faster than `CoolProp.PropsSI` in a Python loop on the same inputs (10,000-point batch, Apple M2 Pro; see `examples/launch_demo.ipynb`, section 2). On a Colab T4 GPU it runs at 27,800 states/sec on a 10⁶-point batch (36 μs/pt) versus 1,600 states/sec on Colab CPU (615 μs/pt), a 17× speedup. Its ceiling is the density solve's data-dependent `while_loop` (lockstep across GPU warps); the feed-forward `(ρ, u)` hot path above does not have that bottleneck.
 - **Composable.** `jit`, `vmap`, `grad`, `custom_vjp`: the full JAX transformation stack works. Embed property evaluations inside your own JIT-compiled simulation and differentiate end-to-end.
 - **Phase-aware.** Robust inversions near the critical point using Halley's method with step damping and bisection fallback. Two-phase dome detection that avoids convergence to thermodynamically unstable spinodal states.
@@ -89,7 +89,7 @@ one thing worth adopting is the fused hot path.
 If your simulation carried `(ρ, u)` and recovered primitives with separate calls:
 
 ```python
-# v0.1 — separate calls, each re-evaluating α-derivatives
+# v0.1: separate calls, each re-evaluating α-derivatives
 from co2_eos.inversions import temperature_from_Du, SUPERCRITICAL
 from co2_eos import span_wagner as sw, transport
 T  = temperature_from_Du(rho, u, phase)     # nested-autodiff Cv, while_loop
@@ -101,7 +101,7 @@ k  = transport.thermal_conductivity(T, rho)
 replace it with the single fused call:
 
 ```python
-# v0.2 — one fused pass: solve T once, reuse the α-derivatives
+# v0.2: one fused pass that solves T once and reuses the α-derivatives
 import co2_eos as co2
 s = co2.properties_from_rho_u(rho, u)       # phase_hint defaults to SUPERCRITICAL
 T, P, mu, k = s["temperature"], s["pressure"], s["viscosity"], s["thermal_conductivity"]

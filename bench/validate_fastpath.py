@@ -2,13 +2,13 @@
 
 Reference = the Span-Wagner oracle (``span_wagner``'s autodiff derivatives of
 α) plus the transport correlations written straight from the papers with
-plain ``pow`` calls — sharing NO code with the economized ``helmholtz`` /
+plain ``pow`` calls, sharing NO code with the economized ``helmholtz`` /
 ``core`` / ``transport`` kernels under test.  Temperature is recovered by a
 to-convergence while-loop Newton (tol 1e-13 K, 60 iteration cap) seeded
 crudely, independent of the seed table.
 
 Checks over the consumers' operating envelope (T ∈ [290, 350] K,
-ρ ∈ [60, 700] kg/m³, single-phase only — dome states are documented
+ρ ∈ [60, 700] kg/m³, single-phase only; dome states are documented
 unstable-branch extrapolation), dense-sampled including a near-critical ring
 and the 1DSim3 spec point (6.736 MPa / 316.65 K):
 

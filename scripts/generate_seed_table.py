@@ -10,7 +10,7 @@ The table is purely a convergence accelerator: the final T comes from the
 Newton polish and the gradients come from the implicit-function-theorem JVP, so
 the table's resolution affects speed only, never accuracy or differentiability.
 Nodes that fall in the (physically unreachable) unstable interior of the
-two-phase dome — where the single-phase EOS has Cv < 0 — never seed a real
+two-phase dome (where the single-phase EOS has Cv < 0) never seed a real
 single-phase query; the regular (ρ, u) grid + bilinear interpolation is robust
 to them.
 
@@ -91,7 +91,7 @@ def main():
     # Dome-safe fill: nodes whose solve did not converge to a stable
     # single-phase root (dome interior: u(T) non-monotone, Cv <= 0) would
     # poison the bilinear cells that straddle the dome boundary.  Replace them
-    # by 1-D interpolation along the u-axis — the dome is a u-interval at
+    # by 1-D interpolation along the u-axis; the dome is a u-interval at
     # fixed rho, so the fill is smooth, and those nodes never seed a real
     # single-phase query (the seed is a convergence accelerator only).
     bad = ((np.abs(np.array(resid)) > 1.0) | (np.array(cv) <= 0.0)
@@ -105,7 +105,7 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     # The T0 table is stored float32: it is a Newton SEED only (the polish
     # sets accuracy), f32 quantization adds ~3e-5 K to a seed whose bilinear
-    # interpolation error is orders larger — and the halved footprint keeps
+    # interpolation error is orders larger, and the halved footprint keeps
     # the embedded constant below the XLA:CPU size threshold above which
     # gathers are dispatched to the parallel executor (~25 us/call overhead).
     np.savez(

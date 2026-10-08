@@ -2,7 +2,7 @@
 
 All notable changes to co2-eos are documented here.
 
-## [0.3.1] — 2026-10-01
+## [0.3.1] - 2026-10-01
 
 Bug fix: `density_from_PT` under the auto hint returned a root from inside the
 two-phase dome for subcritical temperatures within 10 K of T_c and pressures in
@@ -30,15 +30,15 @@ compressed-liquid 821; 296.15 K, 6.5 MPa gave 491 against 755). No API change.
   (rtol 1e-8; measured worst 1.5e-12), jit/vmap with mixed hints, the
   gradient at the old hole, and the guard itself.
 
-## [0.3.0] — 2026-07-03
+## [0.3.0] - 2026-07-03
 
 Performance release: the `(ρ, u)` hot path is **2.6× faster at N = 64 and
 6.3× faster at N = 1024 on CPU** than 0.2.0 (7.6–19.9× vs the 0.1 autodiff
-path), with **round-off-level accuracy consumed** — every property ≤ 1.3e-10
+path), with **round-off-level accuracy consumed**: every property ≤ 1.3e-10
 and every (ρ, u)-derivative ≤ 1.2e-11 max relative vs an independent
 Span-Wagner oracle chain, both AD modes (`docs/validation-fastpath-2026-07.md`).
 **No API changes**; `properties_from_rho_u` signature and `phase_hint`
-semantics are untouched, and there is no accuracy/speed switch — the fast path
+semantics are untouched, and there is no accuracy/speed switch: the fast path
 is exact re-association of the same Span-Wagner arithmetic.
 
 ### Changed
@@ -56,12 +56,12 @@ is exact re-association of the same Span-Wagner arithmetic.
   interpolation (unconverged unstable-branch nodes had been poisoning
   bilinear cells near the dome boundary), stored float32, uniform-grid direct
   indexing, all four bilinear corners from one gather. Measured
-  max |T − T*| = 1.0e-12 K over 40k single-phase envelope samples — identical
+  max |T − T*| = 1.0e-12 K over 40k single-phase envelope samples, identical
   to the previous 5-step accuracy.
 - **The Huber critical-enhancement reference compressibility is a
   precomputed degree-100 Chebyshev in δ** (2.8e-13 max rel over δ ∈ [0, 2.75];
   `co2_eos/data/chi_ref_cheb.npz`, generator
-  `scripts/generate_chi_ref_table.py`) — it is a function of δ alone and had
+  `scripts/generate_chi_ref_table.py`): it is a function of δ alone and had
   been costing a full residual bundle at τ_ref per point (~20 % of the path).
   Exact-bundle fallback if the data file is absent.
 - Viscosity / conductivity correlations use the same ladder treatment
@@ -72,18 +72,18 @@ is exact re-association of the same Span-Wagner arithmetic.
 - `bench/profile_hotpath.py` (component profile, HLO transcendental census,
   Newton convergence), `bench/validate_fastpath.py` (independent-oracle
   validation harness), `bench/proto_*.py` (measured prototypes, including the
-  **rejected** tensor-Chebyshev surface surrogate — with the critical point
+  **rejected** tensor-Chebyshev surface surrogate: with the critical point
   inside the operating envelope the non-analytic terms defeat spectral
   convergence), and `tests/test_fastpath_validation.py` pinning the fast path
   at round-off in CI.
 - Reports: `docs/profiling-hotpath-2026-07.md`,
   `docs/validation-fastpath-2026-07.md`.
 
-## [0.2.0] — 2026-06-24
+## [0.2.0] - 2026-06-24
 
 Performance redesign of the hot path: hand-coded analytic α-derivatives, a fused
 `(ρ, u) → {all properties}` entry point, and a table-seeded fixed-iteration
-inversion. **Accuracy and gradients are unchanged** — the redesign is validated
+inversion. **Accuracy and gradients are unchanged**: the redesign is validated
 to match the previous autodiff EOS and CoolProp to the same tight tolerances.
 The public surface gains the fused hot-path functions; the scalar state
 functions keep their signatures (see "Migrating" below).
@@ -100,23 +100,23 @@ count (a long tail from a crude initial guess).
 
 ### Added
 
-- **`properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)`** — the new primary
+- **`properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)`**: the new primary
   hot-path entry point. Batched / array-native (pass 1-D arrays, get a dict of
   1-D arrays). Solves T once from `u(T, ρ) = u` and reuses the α-derivatives to
   return `{temperature, density, pressure, cv, cp, speed_of_sound, enthalpy,
   internal_energy, entropy, gibbs_energy, viscosity, thermal_conductivity}`.
   `density` and `internal_energy` echo the inputs exactly.
-- **`temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)`** — batched lean
+- **`temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)`**: batched lean
   inversion returning T only. Correct jvp/vjp via the implicit function theorem.
-- **`co2_eos.helmholtz`** — the analytic Helmholtz core: `residual_derivs`,
+- **`co2_eos.helmholtz`**: the analytic Helmholtz core: `residual_derivs`,
   `ideal_derivs` (value + all first/second τ,δ derivatives in one fused pass),
   plus the δ-precomputed τ-derivative path used by the Newton inner loop.
-- **`co2_eos.core`** — the fused property kernel and the table-seeded inversion.
-- **`co2_eos/data/seed_table.npz`** + `scripts/generate_seed_table.py` — a
+- **`co2_eos.core`**: the fused property kernel and the table-seeded inversion.
+- **`co2_eos/data/seed_table.npz`** + `scripts/generate_seed_table.py`: a
   precomputed `(ρ, u) → T₀` bilinear seed table. It is a convergence accelerator
   only: the Newton polish sets accuracy and the IFT JVP sets gradients, so the
   table carries no accuracy or differentiability risk.
-- `bench/` — profiling and before/after benchmark scripts (CPU and the V100S
+- `bench/`: profiling and before/after benchmark scripts (CPU and the V100S
   `gpu_bench.sh` harness for flux-compute).
 
 ### Changed
@@ -163,7 +163,7 @@ compute-bound (N ≳ 64k, measured to N = 2²⁰). Full tables in `bench/PROFILI
 - Scalar `properties`, `state_from_PT`, `state_from_Ph`, `state_from_Du`,
   `density_from_PT`; the saturation curve API; `viscosity` / `thermal_conductivity`.
 - `co2_eos.span_wagner` (autodiff EOS) and `co2_eos.inversions` (original Newton
-  solvers) remain importable — they are the validation ground truth and the
+  solvers) remain importable: they are the validation ground truth and the
   benchmark "before" baseline.
 
 ## [0.1.0]

@@ -1,18 +1,18 @@
 """Before/after benchmark of the EOS hot path: original autodiff vs new analytic.
 
 BEFORE (original, unchanged modules):
-  * inversions.temperature_from_Du   — autodiff Cv, while_loop Newton
-  * span_wagner.all_properties_shared — 5 autodiff reduced derivatives
+  * inversions.temperature_from_Du     autodiff Cv, while_loop Newton
+  * span_wagner.all_properties_shared   5 autodiff reduced derivatives
   * full hot path = temperature_from_Du + pressure + viscosity + thermal_cond
 
 AFTER (redesigned core):
-  * core._temperature_from_Du        — analytic Cv, table seed, fixed Newton
-  * core._thermo                     — analytic derivative bundle
-  * core._state_from_rho_u           — fused: solve T once, derive everything
+  * core._temperature_from_Du          analytic Cv, table seed, fixed Newton
+  * core._thermo                       analytic derivative bundle
+  * core._state_from_rho_u             fused: solve T once, derive everything
 
 Runs at N = 64/256/1024/4096.  Reports µs/call and the after/before speedup.
 The full-path BEFORE uses the (already analytic) transport conductivity, so it
-*understates* the real speedup — the original autodiff conductivity was slower.
+*understates* the real speedup: the original autodiff conductivity was slower.
 """
 import argparse, json, time
 import jax, jax.numpy as jnp, numpy as np

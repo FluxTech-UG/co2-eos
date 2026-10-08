@@ -6,21 +6,21 @@ analytic α-derivatives.  JIT-compilable, ``vmap``-able, fully differentiable.
 Public API
 ==========
 
-Simulation hot path — full state from the conserved variables (ρ, u).  These are
+Simulation hot path: full state from the conserved variables (ρ, u).  These are
 **batched / array-native**: pass 1-D arrays, get back a dict of 1-D arrays.  A
 single fused pass solves T once and reuses the α-derivatives for every property::
 
     properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL) -> dict
     temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL) -> T   # T only
 
-State functions — **scalar** in their inputs (0-d arrays or Python floats); wrap
+State functions: **scalar** in their inputs (0-d arrays or Python floats); wrap
 with ``jax.vmap`` for batches::
 
-    properties(T, rho)              — full state from (T, ρ)
-    state_from_PT(P, T)             — full state from (P, T)
-    state_from_Ph(P, h)             — full state from (P, h)
-    state_from_Du(rho, u)           — full state from (ρ, u)   (scalar form)
-    density_from_PT(P, T)           — ρ from (P, T)
+    properties(T, rho)                full state from (T, ρ)
+    state_from_PT(P, T)               full state from (P, T)
+    state_from_Ph(P, h)               full state from (P, h)
+    state_from_Du(rho, u)             full state from (ρ, u)   (scalar form)
+    density_from_PT(P, T)             ρ from (P, T)
 
 Each full-state dict has keys: ``temperature``, ``density``, ``pressure``,
 ``cv``, ``cp``, ``speed_of_sound``, ``enthalpy``, ``internal_energy``,
@@ -97,7 +97,7 @@ def thermal_conductivity(T, rho):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Hot path: full state from conserved (ρ, u) — batched / array-native
+# Hot path: full state from conserved (ρ, u), batched / array-native
 # ═══════════════════════════════════════════════════════════════════════════
 
 @jax.jit
@@ -133,7 +133,7 @@ def properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL):
 def temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL):
     """Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
 
-    The lean inversion (no property derivation) — use when only T is needed.
+    The lean inversion (no property derivation); use when only T is needed.
     Differentiable: correct jvp/vjp via the implicit function theorem.
     """
     rho = jnp.asarray(rho, dtype=jnp.float64)
@@ -144,7 +144,7 @@ def temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# State functions — scalar in their inputs (vmap for batches)
+# State functions: scalar in their inputs (vmap for batches)
 # ═══════════════════════════════════════════════════════════════════════════
 
 @jax.jit

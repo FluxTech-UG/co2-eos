@@ -1,8 +1,8 @@
 """Span-Wagner (1996) reduced Helmholtz energy with hand-coded analytic
-derivatives — pure JAX, transcendental-economized.
+derivatives: pure JAX, transcendental-economized.
 
 This is the numerical core of the EOS hot path.  It computes α and all the
-derivatives a property/inversion pass needs — α_δ, α_τ, α_δδ, α_ττ, α_δτ —
+derivatives a property/inversion pass needs (α_δ, α_τ, α_δδ, α_ττ, α_δτ)
 analytically, and exploits the *structure* of the Span-Wagner exponents so the
 per-point transcendental count collapses:
 
@@ -17,7 +17,7 @@ per-point transcendental count collapses:
     s^(2/3) remain as real ``pow`` calls.
 
 The structural facts are asserted at import against the coefficient tables in
-``span_wagner`` (the single source of truth) — if the tables ever change shape,
+``span_wagner`` (the single source of truth); if the tables ever change shape,
 import fails loudly rather than computing a stale factorization.
 
 The result is the same Span-Wagner sum re-associated: agreement with the
@@ -46,7 +46,7 @@ from co2_eos.span_wagner import (
     _NA_N, _NA_A, _NA_B, _NA_BETA, _NA_BIG_A, _NA_BIG_B, _NA_BIG_C, _NA_BIG_D,
 )
 
-# ── Static (Python-scalar) views of the tables — folded into the trace ─────
+# ── Static (Python-scalar) views of the tables, folded into the trace ─────
 _PN = np.asarray(_AR_N)
 _PD = np.asarray(_AR_D).astype(int)
 _PT = np.asarray(_AR_T)
@@ -65,7 +65,7 @@ _NAB = np.asarray(_NA_B)
 _NABIGB = np.asarray(_NA_BIG_B)
 _NABIGC = np.asarray(_NA_BIG_C)
 
-# Structural facts the economization relies on — asserted, not assumed.
+# Structural facts the economization relies on: asserted, not assumed.
 assert np.all(_PD == np.asarray(_AR_D)) and _PD.max() <= 10, "δ-exponent not a small integer"
 assert np.all(_PL == np.asarray(_AR_L)) and _PL.max() <= 6, "l-exponent not a small integer"
 assert np.all(np.abs(_PT * 4 - np.round(_PT * 4)) < 1e-12), "τ-exponent not a multiple of ¼"
@@ -142,7 +142,7 @@ def _exp_envelopes(dp):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Ideal-gas part α⁰ — τ derivatives (δ part is only ln δ, not needed here)
+# Ideal-gas part α⁰: τ derivatives (δ part is only ln δ, not needed here)
 # ═══════════════════════════════════════════════════════════════════════════
 
 def ideal_derivs(tau, delta):
@@ -172,7 +172,7 @@ def ideal_derivs(tau, delta):
 
 
 def ideal_tau_only(tau):
-    """Return (α⁰_τ, α⁰_ττ) — the only ideal quantities the Newton needs.
+    """Return (α⁰_τ, α⁰_ττ): the only ideal quantities the Newton needs.
 
     Independent of δ, so cheaper than ``ideal_derivs`` for the inner loop.
     """
@@ -187,7 +187,7 @@ def ideal_tau_only(tau):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Non-analytic terms — shared helpers
+# Non-analytic terms: shared helpers
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _pow78(Db):
@@ -220,7 +220,7 @@ def _na_delta_state(delta):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Residual part αʳ — full analytic derivative bundle (one economized pass)
+# Residual part αʳ: full analytic derivative bundle (one economized pass)
 # ═══════════════════════════════════════════════════════════════════════════
 
 def residual_derivs(tau, delta):
@@ -441,7 +441,7 @@ def residual_tau_fast(tau, dstate):
 
 
 def residual_tau_derivs(tau, delta):
-    """Return (αʳ_τ, αʳ_ττ) — the residual quantities the Newton needs.
+    """Return (αʳ_τ, αʳ_ττ): the residual quantities the Newton needs.
 
     Computes only the τ-derivatives; the δ-dependent envelopes are
     loop-invariant at fixed ρ and XLA hoists them across an unrolled Newton.

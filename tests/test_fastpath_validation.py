@@ -1,7 +1,7 @@
 """The economized (ρ, u) fast path must match the independent oracle chain.
 
 The reference is built in ``bench/validate_fastpath.py`` from the
-``span_wagner`` autodiff oracle plus literal-formula transport — sharing no
+``span_wagner`` autodiff oracle plus literal-formula transport, sharing no
 code with the economized kernels.  These tests run the same comparison on
 smaller samples so CI keeps the fast path pinned at round-off accuracy.
 """

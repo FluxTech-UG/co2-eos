@@ -6,7 +6,7 @@ uniformly over the consumers' operating box **T ∈ [290, 350] K, ρ ∈ [60, 70
 kg/m³**, `u` derived from Span-Wagner so (ρ, u) is exactly consistent.
 
 Consumer context: 1DSim3 measures this call at **379 µs/eval at N=64** (83.5 %
-of its RHS). Standalone here it is **325 µs at N=64** — consistent; the
+of its RHS). Standalone here it is **325 µs at N=64**, consistent; the
 remainder is consumer-side glue. All timings are medians, `block_until_ready`.
 
 ## Component timings
@@ -40,7 +40,7 @@ fused); the split below the table accounts for that.
 | Seed table (2× searchsorted + bilinear gather) | ~1 % |
 
 Newton standalone is 79 % of `full`; fused, its δ-envelope prep is CSE-shared
-with the final bundle, so its marginal cost is somewhat lower — the loop body
+with the final bundle, so its marginal cost is somewhat lower; the loop body
 (5 × τ-transcendentals) is the dominant cost either way.
 
 ## Newton convergence (the 5 iterations are a seed problem)
@@ -57,13 +57,13 @@ with the final bundle, so its marginal cost is somewhat lower — the loop body
 | 5 | 9.1e-13 | 4.7e-13 | 5.7e-14 |
 
 - The shipped bilinear seed is excellent in the bulk (p50 3 mK) but has a
-  **near-critical band ~5 K off** (p99 4.4 K) — that band alone is why 5
+  **near-critical band ~5 K off** (p99 4.4 K): that band alone is why 5
   iterations are needed. The k=3 worst point is T=304.13 K, ρ=451 kg/m³, i.e.
   the immediate critical neighbourhood where Cv is large and Newton contracts
   slowest.
 - **The convergence tail lives entirely inside the two-phase dome** (16 % of
   the uniform box, 0 % of consumers' actual states): there u(T,ρ) on the
-  unstable branch is non-monotone and the inversion is ill-posed — documented
+  unstable branch is non-monotone and the inversion is ill-posed: documented
   behaviour, unchanged. Single-phase max after 5 iters: 9e-13 K.
 - Consequence: a seed accurate to ~10 mK near-critical turns 5 iterations into
   2 (bulk) – 3 (critical neighbourhood) for free.
@@ -84,14 +84,14 @@ with the final bundle, so its marginal cost is somewhat lower — the loop body
      Δ^(7/8) is a sqrt-ladder, only Δ^0.925 and s^(5/3) need real pow/cbrt;
      the Ψ exponentials collapse to 2.
    A restructured kernel needs **~15–20 transcendentals per full bundle**
-   (vs ~150–190) and ~10 per Newton iteration (vs ~45) — bit-identical math,
+   (vs ~150–190) and ~10 per Newton iteration (vs ~45), bit-identical math,
    no accuracy budget consumed.
 2. **`chi_ref` is a 1-D function evaluated as a 2-D bundle.** The critical
-   enhancement needs dP/dρ at fixed T_ref = 456.19 K — a smooth function of δ
-   alone — yet `transport.py` evaluates the full 6-derivative residual bundle
+   enhancement needs dP/dρ at fixed T_ref = 456.19 K, a smooth function of δ
+   alone, yet `transport.py` evaluates the full 6-derivative residual bundle
    at (τ_ref, δ) per point per eval (~20 % of the whole hot path). A
    precomputed 1-D polynomial in δ (fit offline to ~1e-13) eliminates it.
-3. **Dispatch floor** is ~4 µs/call on this machine — negligible at the
+3. **Dispatch floor** is ~4 µs/call on this machine: negligible at the
    consumer's N inside their own jit, visible in standalone component rows.
 
 ## Optimization directions this licenses (measured-before-committed)

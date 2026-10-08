@@ -1,4 +1,4 @@
-"""Prototype C: seed-table v2 — dome-safe fill + denser grid -> fewer iters.
+"""Prototype C: seed-table v2: dome-safe fill + denser grid -> fewer iters.
 
 The shipped 128x256 bilinear seed table solves dome-interior nodes on the
 unstable branch (damped Newton on a non-monotone u(T)); the garbage corners
@@ -7,7 +7,7 @@ dome/critical boundary and forcing 5 Newton iterations.
 
 v2: 256x512 uniform grid over the same box; nodes whose solve did not converge
 (or landed on cv<=0) are filled by 1-D interpolation along the u-axis (the dome
-is a u-interval at fixed rho, so row fill is smooth and harmless — those nodes
+is a u-interval at fixed rho, so row fill is smooth and harmless; those nodes
 never seed a real single-phase query).
 
 Measures: seed error and |T_k - T*| vs k on dense single-phase envelope

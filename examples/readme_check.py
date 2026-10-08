@@ -22,7 +22,7 @@ import co2_eos as co2
 
 def _check(label, ok, detail=""):
     status = "PASS" if ok else "FAIL"
-    print(f"  [{status}] {label}{('  — ' + detail) if detail else ''}")
+    print(f"  [{status}] {label}{(': ' + detail) if detail else ''}")
     if not ok:
         sys.exit(1)
 
@@ -42,14 +42,14 @@ def block_properties_from_T_rho():
 
 
 def block_state_from_PT():
-    print("\n# State from (P, T) — phase-aware, robust near the critical point")
+    print("\n# State from (P, T), phase-aware, robust near the critical point")
     state = co2.state_from_PT(P=8e6, T=310.0)
     rho = float(state["density"])
     P = float(state["pressure"])
     print(f"  density   = {rho:.3f} kg/m³")
     print(f"  pressure  = {P:.4e} Pa")
     # CoolProp reference at (P=8 MPa, T=310 K): 327.7120900180151 kg/m³
-    # (gas-like side of the Widom line — supercritical but low-density).
+    # (gas-like side of the Widom line: supercritical but low-density).
     _check("density agrees with CoolProp at (8 MPa, 310 K) to 1e-6 rel.",
            abs(rho - 327.7120900180151) / 327.7120900180151 < 1e-6,
            f"got {rho:.6f}, expected ~327.712")
@@ -59,7 +59,7 @@ def block_state_from_PT():
 
 
 def block_jax_grad():
-    print("\n# Differentiate anything — e.g. ∂ρ/∂T at constant P")
+    print("\n# Differentiate anything, e.g. ∂ρ/∂T at constant P")
     drho_dT = jax.grad(lambda T: co2.state_from_PT(P=8e6, T=T)["density"])(310.0)
     val = float(drho_dT)
     print(f"  drho/dT |_(P=8e6, T=310) = {val}")

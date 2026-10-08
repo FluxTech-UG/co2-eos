@@ -1,4 +1,4 @@
-"""Span-Wagner (1996) equation of state for CO₂ — pure JAX implementation.
+"""Span-Wagner (1996) equation of state for CO₂: pure JAX implementation.
 
 Implements the complete reduced Helmholtz energy α(τ,δ) = α⁰(τ,δ) + αʳ(τ,δ)
 from: Span & Wagner, J. Phys. Chem. Ref. Data 25, 1509-1596 (1996).
@@ -6,7 +6,7 @@ from: Span & Wagner, J. Phys. Chem. Ref. Data 25, 1509-1596 (1996).
 Coefficients sourced from the original paper and cross-referenced against
 CoolProp's machine-readable fluids/CarbonDioxide.json.
 
-All thermodynamic properties are derived via jax.grad — no hand-coded
+All thermodynamic properties are derived via jax.grad; no hand-coded
 derivative formulas. CoolProp is never imported here.
 """
 
@@ -25,7 +25,7 @@ RHOC = RHOC_MOLAR * M  # kg/m³  ≈ 467.60
 R_MOLAR = 8.31451      # J/(mol·K)  (value used in Span-Wagner)
 R = R_MOLAR / M        # J/(kg·K)   ≈ 188.9241
 PC = 7377300.0          # Pa
-T_TRIPLE = 216.592      # K  — CO₂ triple-point temperature
+T_TRIPLE = 216.592      # K, CO₂ triple-point temperature
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -42,7 +42,7 @@ T_TRIPLE = 216.592      # K  — CO₂ triple-point temperature
 # a2_off=8.82013935801453 already folded into a1, a2)
 _A0_A1 = 8.37304456 + (-14.4979156224319)
 _A0_A2 = -3.70454304 + 8.82013935801453
-_A0_LOGTAU = 2.5       # coefficient of ln(τ) — CoolProp IdealGasHelmholtzLogTau
+_A0_LOGTAU = 2.5       # coefficient of ln(τ), CoolProp IdealGasHelmholtzLogTau
 
 _A0_PE_N = jnp.array([1.99427042, 0.62105248, 0.41195293,
                        1.04028922, 0.08327678])
@@ -206,7 +206,7 @@ def alpha(tau, delta):
 # ── Derivative building blocks ──────────────────────────────────────────
 
 def _alpha_of_T_rho(T, rho):
-    """α(τ(T), δ(ρ)) as a function of physical T, ρ — for autodiff."""
+    """α(τ(T), δ(ρ)) as a function of physical T, ρ, for autodiff."""
     tau = TC / T
     delta = rho / RHOC
     return alpha(tau, delta)
@@ -344,7 +344,7 @@ def _scalar_entropy(T, rho):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Public API — batched, JIT-compiled, vmappable
+# Public API: batched, JIT-compiled, vmappable
 # ═══════════════════════════════════════════════════════════════════════════
 
 @jax.jit

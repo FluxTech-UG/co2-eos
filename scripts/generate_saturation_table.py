@@ -27,7 +27,7 @@ from co2_eos.span_wagner import (
 )
 
 # ── Constants ────────────────────────────────────────────────────────────
-T_TRIPLE = 216.592       # K — CO2 triple point temperature
+T_TRIPLE = 216.592       # K, CO2 triple point temperature
 T_CRIT = TC              # 304.1282 K
 T_NEAR_CRIT = T_CRIT - 0.001  # stop table 1 mK below Tc
 
@@ -98,7 +98,7 @@ def solve_saturation_curve(T_grid):
             rho_l_guess = CP.PropsSI('D', 'T', float(T), 'Q', 0, 'CO2')
             rho_v_guess = CP.PropsSI('D', 'T', float(T), 'Q', 1, 'CO2')
         except Exception:
-            # Very near critical — use previous solution with mild extrapolation
+            # Very near critical: use previous solution with mild extrapolation
             if i > 0:
                 rho_l_guess = rho_l[i - 1]
                 rho_v_guess = rho_v[i - 1]

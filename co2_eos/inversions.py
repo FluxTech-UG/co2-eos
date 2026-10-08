@@ -1,5 +1,5 @@
 """
-Thermodynamic inversions — pure JAX, JIT-compilable, vmappable,
+Thermodynamic inversions: pure JAX, JIT-compilable, vmappable,
 with correct gradients via implicit differentiation (custom_jvp).
 
 Defines custom_jvp rules so that both forward-mode (jvp) and reverse-mode
@@ -24,7 +24,7 @@ jax.config.update("jax_enable_x64", True)
 # context). If the table is loaded for the first time inside a JIT trace,
 # the arrays it materialises end up tagged as tracers, breaking reverse-mode
 # differentiation through density_from_PT. Loading it here pins them as
-# concrete constants. If the file is missing we tolerate it — first
+# concrete constants. If the file is missing we tolerate it; the first
 # inversion call will surface a clear FileNotFoundError.
 try:
     sat._ensure_loaded()
@@ -154,8 +154,8 @@ def _halley_cond(state):
 
 # ── Bisection fallback via lax.while_loop ────────────────────────────────
 
-_BISECT_LO = 1.0       # kg/m³ — lower bound
-_BISECT_HI = 1200.0    # kg/m³ — upper bound
+_BISECT_LO = 1.0       # kg/m³, lower bound
+_BISECT_HI = 1200.0    # kg/m³, upper bound
 _BISECT_ITERS = 60      # ~10⁻¹⁸ relative precision
 _BRANCH_TOL = 1e-4      # relative slack around ρ_l(T), ρ_v(T) for the branch tests
 
@@ -243,7 +243,7 @@ def _solve_density(T, P, phase_hint):
     final_state = jax.lax.while_loop(_halley_cond, _halley_body, init_state)
     rho_halley, _, _, _, converged = final_state
 
-    # Bisection safety net — only runs when Halley did not converge
+    # Bisection safety net: only runs when Halley did not converge
     def _bisect_branch(_):
         lo, hi = _bisection_bracket(T, P, phase_hint)
         rho_bisect = _bisection_solve(T, P, lo, hi)
@@ -320,7 +320,7 @@ def density_from_PT(T, P, phase_hint):
 
 
 # ═════════════════════════════════════════════════════════════════════════
-# 2D inversion: state_from_Ph — find (T, ρ) given (P, h)
+# 2D inversion state_from_Ph: find (T, ρ) given (P, h)
 # ═════════════════════════════════════════════════════════════════════════
 
 # ── Initial guess for (T, ρ) from (P, h) ──────────────────────────────
@@ -354,7 +354,7 @@ def _initial_guess_Ph(P, h, phase_hint):
     # Near Pc, the Clausius-Clapeyron slope dT/dP ≈ 0.028 K/kPa ≈ 28 K/MPa.
     # This extrapolation gives T_pc ≈ Tc + (P - Pc) * slope, which tracks
     # the Cp peak (Widom line) much better than an ideal-gas estimate.
-    dTdP_sat = 2.8e-5  # K/Pa — Clausius-Clapeyron slope near Tc
+    dTdP_sat = 2.8e-5  # K/Pa, Clausius-Clapeyron slope near Tc
     T_pseudo = sw.TC + (P - sw.PC) * dTdP_sat
 
     # Ideal-gas fallback for pressures far above Pc where the pseudocritical
@@ -377,7 +377,7 @@ def _initial_guess_Ph(P, h, phase_hint):
     # critical-point enthalpy, the fluid is subcooled liquid.  Estimate T
     # from a rough liquid Cp (~2500 J/kg/K) below TC rather than anchoring
     # on the pseudocritical line which overshoots into the supercritical region.
-    Cp_liq = 2500.0  # J/(kg·K) — rough subcooled CO₂ liquid heat capacity
+    Cp_liq = 2500.0  # J/(kg·K), rough subcooled CO₂ liquid heat capacity
     T_liq_est = sw.TC - (h_crit - h) / Cp_liq
     h_clearly_liquid = h < h_crit - 50.0e3  # h at least 50 kJ/kg below h_crit
     T_super = jnp.where(h_clearly_liquid, T_liq_est, T_super)
@@ -577,7 +577,7 @@ def state_from_Ph(P, h, phase_hint):
 
 
 # ═════════════════════════════════════════════════════════════════════════
-# 1D inversion: temperature_from_Du — find T given (ρ, u)
+# 1D inversion temperature_from_Du: find T given (ρ, u)
 # ═════════════════════════════════════════════════════════════════════════
 
 # ── Initial guess for T from (ρ, u) ──────────────────────────────────
