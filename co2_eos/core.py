@@ -120,9 +120,10 @@ def _seed_T(rho, u):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _thermo(T, rho):
-    """All eight Helmholtz-derived properties at scalar (T, ρ).
+    """All ten Helmholtz-derived properties at scalar (T, ρ).
 
-    Returns (P, Cv, Cp, w, h, u, s, g) plus the reduced residual derivatives
+    Returns (P, Cv, Cp, w, h, u, s, g, (∂P/∂T)_ρ, (∂P/∂ρ)_T) plus the reduced
+    residual derivatives
     (αʳ_δ, αʳ_δδ, αʳ_ττ, αʳ_δτ) and ideal α⁰_ττ, so the transport layer can
     reuse them without recomputing residual_derivs.
     """
@@ -134,8 +135,13 @@ def _thermo(T, rho):
     sum_tt = a0_tt + ar_tt
     P = rho * R * T * (1.0 + delta * ar_d)
     cv = -R * tau ** 2 * sum_tt
-    num = (1.0 + delta * ar_d - delta * tau * ar_dt) ** 2
+    # (∂P/∂T)_ρ = ρR·dt_term and (∂P/∂ρ)_T = RT·den; Cp and w are built from
+    # the same two brackets.
+    dt_term = 1.0 + delta * ar_d - delta * tau * ar_dt
+    num = dt_term ** 2
     den = 1.0 + 2.0 * delta * ar_d + delta ** 2 * ar_dd
+    dP_dT_rho = rho * R * dt_term
+    dP_drho_T = R * T * den
     cp = cv + R * num / den
     w_sq = R * T * (den - num / (tau ** 2 * sum_tt))
     w = jnp.sqrt(jnp.maximum(w_sq, 0.0))
@@ -145,7 +151,7 @@ def _thermo(T, rho):
     s = R * (tau * sum_t - a0 - ar)
     g = R * T * (1.0 + delta * ar_d + a0 + ar)
     aux = (ar_d, ar_dd, ar_tt, ar_dt, a0_tt)
-    return (P, cv, cp, w, h, u, s, g), aux
+    return (P, cv, cp, w, h, u, s, g, dP_dT_rho, dP_drho_T), aux
 
 
 # ── Lean (u, Cv) for the Newton inner loop ──────────────────────────────────
@@ -235,10 +241,10 @@ def _state_from_T_rho(T, rho):
     derivatives; conductivity reuses the bundle plus a reference-T δ-pair).
 
     Keys: temperature, density, pressure, internal_energy, cv, cp,
-    speed_of_sound, enthalpy, entropy, gibbs_energy, viscosity,
-    thermal_conductivity.
+    speed_of_sound, enthalpy, entropy, gibbs_energy, dP_dT_rho, dP_drho_T,
+    viscosity, thermal_conductivity.
     """
-    (P, cv, cp, w, h, u, s, g), aux = _thermo(T, rho)
+    (P, cv, cp, w, h, u, s, g, dP_dT_rho, dP_drho_T), aux = _thermo(T, rho)
     ar_d, ar_dd, ar_tt, ar_dt, a0_tt = aux
     mu = _tr._scalar_viscosity(T, rho)
     lam = _tr._thermal_conductivity_shared(T, rho, mu, ar_d, ar_dd, ar_tt,
@@ -254,6 +260,8 @@ def _state_from_T_rho(T, rho):
         "enthalpy": h,
         "entropy": s,
         "gibbs_energy": g,
+        "dP_dT_rho": dP_dT_rho,
+        "dP_drho_T": dP_drho_T,
         "viscosity": mu,
         "thermal_conductivity": lam,
     }

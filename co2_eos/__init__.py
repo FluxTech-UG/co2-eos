@@ -13,6 +13,11 @@ single fused pass solves T once and reuses the α-derivatives for every property
     properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL) -> dict
     temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL) -> T   # T only
 
+Full state from (ρ, T), for a code that evolves temperature: also batched, no
+inversion (a direct evaluation of the Helmholtz surface)::
+
+    properties_from_rho_T(rho, T) -> dict
+
 State functions: **scalar** in their inputs (0-d arrays or Python floats); wrap
 with ``jax.vmap`` for batches::
 
@@ -22,9 +27,11 @@ with ``jax.vmap`` for batches::
     state_from_Du(rho, u)             full state from (ρ, u)   (scalar form)
     density_from_PT(P, T)             ρ from (P, T)
 
-Each full-state dict has keys: ``temperature``, ``density``, ``pressure``,
-``cv``, ``cp``, ``speed_of_sound``, ``enthalpy``, ``internal_energy``,
-``entropy``, ``gibbs_energy``, ``viscosity``, ``thermal_conductivity``.
+Each full-state dict has keys: ``temperature`` [K], ``density`` [kg/m³],
+``pressure`` [Pa], ``cv`` and ``cp`` [J/(kg·K)], ``speed_of_sound`` [m/s],
+``enthalpy``, ``internal_energy`` and ``gibbs_energy`` [J/kg], ``entropy``
+[J/(kg·K)], ``dP_dT_rho`` ((∂P/∂T)_ρ [Pa/K]), ``dP_drho_T`` ((∂P/∂ρ)_T
+[Pa·m³/kg]), ``viscosity`` [Pa·s], ``thermal_conductivity`` [W/(m·K)].
 
 Saturation curve (cubic-spline interpolation of a precomputed Maxwell table)::
 
@@ -52,7 +59,7 @@ import jax.numpy as jnp
 # Enable float64 for the entire library (also done by submodules).
 jax.config.update("jax_enable_x64", True)
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 
 # ── Phase hint constants ────────────────────────────────────────────────────
 LIQUID = 0
@@ -127,6 +134,33 @@ def properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL):
     phase = jnp.broadcast_to(jnp.asarray(phase_hint, dtype=jnp.int32),
                              jnp.shape(rho))
     return jax.vmap(_core._state_from_rho_u)(rho, u, phase)
+
+
+@jax.jit
+def properties_from_rho_T(rho, T):
+    """Full thermodynamic + transport state from (ρ, T). Batched.
+
+    The array-native counterpart of the scalar ``properties(T, rho)`` (note the
+    argument order: ρ first, matching ``properties_from_rho_u``).  A direct
+    evaluation of the Helmholtz surface: no inversion, so no phase hint.  One
+    analytic α-derivative pass per point feeds every property, including
+    ``dP_dT_rho`` and ``dP_drho_T``.  ``rho`` and ``T`` are 1-D arrays of
+    equal length; the result is a dict of 1-D float64 arrays.
+
+    This is ``jax.vmap`` of the same scalar kernel ``properties`` uses, so the
+    two agree bit for bit; it exists as the documented batched entry point.
+
+    Note: inside the two-phase dome (subcritical T, ρ between ρ_v and ρ_l) the
+    EOS returns its unstable single-phase extrapolation (there
+    ``dP_drho_T`` can be negative); the caller keeps its states out of the dome.
+    """
+    rho = jnp.asarray(rho, dtype=jnp.float64)
+    T = jnp.asarray(T, dtype=jnp.float64)
+    if rho.ndim != 1 or T.shape != rho.shape:
+        raise ValueError(
+            f"properties_from_rho_T expects 1-D rho and T of equal shape; "
+            f"got rho {rho.shape}, T {T.shape}")
+    return jax.vmap(_core._state_from_T_rho)(T, rho)
 
 
 @jax.jit
@@ -213,7 +247,7 @@ def state_from_Du(rho, u, phase_hint=AUTO):
 __all__ = [
     "__version__",
     "LIQUID", "VAPOR", "SUPERCRITICAL", "AUTO",
-    "properties_from_rho_u", "temperature_from_rho_u",
+    "properties_from_rho_u", "properties_from_rho_T", "temperature_from_rho_u",
     "properties",
     "state_from_PT", "state_from_Ph", "state_from_Du",
     "density_from_PT",

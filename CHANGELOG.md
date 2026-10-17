@@ -2,6 +2,32 @@
 
 All notable changes to co2-eos are documented here.
 
+## [0.4.0] - 2026-10-17
+
+New API surface: the two pressure derivatives a temperature-form energy
+equation needs, and a batched full-state call at (ρ, T). Existing keys and
+signatures are unchanged.
+
+### Added
+
+- **`dP_dT_rho` and `dP_drho_T` in every full-state dict** (`properties`,
+  `properties_from_rho_u`, `properties_from_rho_T`, `state_from_PT`,
+  `state_from_Ph`, `state_from_Du`): (∂P/∂T)_ρ = ρR(1 + δαʳ_δ − δταʳ_δτ)
+  [Pa/K] and (∂P/∂ρ)_T = RT(1 + 2δαʳ_δ + δ²αʳ_δδ) [Pa·m³/kg], formed in
+  `core._thermo` from the brackets Cp and the speed of sound already use, so
+  they cost no extra α-derivative evaluation.
+- **`properties_from_rho_T(rho, T)`**: batched (1-D arrays in, dict of 1-D
+  arrays out) full state from (ρ, T), the counterpart of
+  `properties_from_rho_u` for a code that evolves temperature. It is `vmap`
+  of the scalar kernel `properties` uses and agrees with it bit for bit;
+  mismatched or non-1-D shapes raise `ValueError`.
+- New `tests/test_pressure_derivatives.py`: at a near-critical
+  (7.4 MPa, 305 K), a dense supercritical (20 MPa, 330 K) and a liquid
+  (10 MPa, 280 K) state, both derivatives equal `jax.grad` of the autodiff
+  `span_wagner` pressure to 1e-9; c_p − c_v = T(∂P/∂T)_ρ²/(ρ²(∂P/∂ρ)_T) and
+  a² = (∂P/∂ρ)_T c_p/c_v hold to 1e-8; the batched call matches
+  `vmap(properties)` to 1e-14; the fields survive jit, vmap and grad.
+
 ## [0.3.1] - 2026-10-01
 
 Bug fix: `density_from_PT` under the auto hint returned a root from inside the

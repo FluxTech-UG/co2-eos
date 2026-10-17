@@ -62,6 +62,7 @@ CO2-EOS solves this for CO₂ by implementing the same reference EOS (Span-Wagne
 - Isochoric and isobaric heat capacities (Cv, Cp)
 - Speed of sound
 - Gibbs energy
+- Pressure derivatives (∂P/∂T)_ρ [Pa/K] and (∂P/∂ρ)_T [Pa·m³/kg], keys `dP_dT_rho` and `dP_drho_T` in every full-state dict (what a code that evolves temperature needs for its energy equation)
 
 **Transport properties:**
 
@@ -77,6 +78,7 @@ CO2-EOS solves this for CO₂ by implementing the same reference EOS (Span-Wagne
 
 - `properties_from_rho_u(rho, u)` / `temperature_from_rho_u(rho, u)`: the batched simulation hot path. Carries (ρ, u) as conserved variables; solves `T(ρ, u)` once with a table-seeded fixed-iteration analytic-Cv Newton, then derives every property (and viscosity / thermal conductivity) in one fused pass. `custom_jvp` (implicit function theorem) for exact forward- and reverse-mode gradients.
 - `state_from_Du(rho, u)`: scalar form of the above (vmap for batches).
+- `properties_from_rho_T(rho, T)`: batched full state from (ρ, T), no inversion; the array-native counterpart of the scalar `properties(T, rho)` (ρ first, like `properties_from_rho_u`). One analytic α-derivative pass per point feeds every property.
 - `state_from_PT(P, T)`: Halley's method with pressure-aware critical-region initial guess, step damping, and bisection safety net
 - `state_from_Ph(P, h, phase_hint=)` (phase-aware): detects the two-phase dome at subcritical pressures and returns saturation properties directly, bypassing single-phase Newton iteration inside the dome
 
