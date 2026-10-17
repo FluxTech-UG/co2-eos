@@ -164,19 +164,20 @@ _Validation harness: the fast (ρ, u) path vs an independent reference chain._
 
 ### co2_eos/__init__.py
 _CO2-EOS: Differentiable CO₂ thermodynamic properties in JAX._
-- const LIQUID  ·L58
-- const VAPOR  ·L59
-- const SUPERCRITICAL  ·L60
-- const AUTO  ·L61
-- @jax.jit viscosity(T, rho)  ·L84: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
-- @jax.jit thermal_conductivity(T, rho)  ·L92: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
-- @jax.jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)  ·L104: Full thermodynamic + transport state from (ρ, u). Batched.
-- @jax.jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)  ·L133: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
-- @jax.jit properties(T, rho)  ·L151: Full thermodynamic + transport state at scalar (T, ρ).
-- @jax.jit state_from_PT(P, T, phase_hint=AUTO)  ·L162: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
-- @jax.jit density_from_PT(P, T, phase_hint=AUTO)  ·L177: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
-- @jax.jit state_from_Ph(P, h, phase_hint=AUTO)  ·L186: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
-- @jax.jit state_from_Du(rho, u, phase_hint=AUTO)  ·L202: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
+- const LIQUID  ·L65
+- const VAPOR  ·L66
+- const SUPERCRITICAL  ·L67
+- const AUTO  ·L68
+- @jax.jit viscosity(T, rho)  ·L91: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
+- @jax.jit thermal_conductivity(T, rho)  ·L99: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
+- @jax.jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)  ·L111: Full thermodynamic + transport state from (ρ, u). Batched.
+- @jax.jit properties_from_rho_T(rho, T)  ·L140: Full thermodynamic + transport state from (ρ, T). Batched.
+- @jax.jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)  ·L167: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
+- @jax.jit properties(T, rho)  ·L185: Full thermodynamic + transport state at scalar (T, ρ).
+- @jax.jit state_from_PT(P, T, phase_hint=AUTO)  ·L196: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
+- @jax.jit density_from_PT(P, T, phase_hint=AUTO)  ·L211: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
+- @jax.jit state_from_Ph(P, h, phase_hint=AUTO)  ·L220: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
+- @jax.jit state_from_Du(rho, u, phase_hint=AUTO)  ·L236: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
 
 ### co2_eos/core.py
 _Redesigned high-performance EOS core: analytic derivatives, fused passes._
@@ -187,13 +188,13 @@ _Redesigned high-performance EOS core: analytic derivatives, fused passes._
 - const _SEED_PATH  ·L62
 - const _HAVE_SEED  ·L66
 - _seed_T(rho, u)  ·L91: Initial T guess for the (ρ, u) inversion via the bilinear table.
-- _thermo(T, rho)  ·L122: All eight Helmholtz-derived properties at scalar (T, ρ).
-- _u_and_cv(T, rho)  ·L153: Internal energy u [J/kg] and Cv [J/(kg·K)] at scalar (T, ρ).
-- _solve_T(rho, u)  ·L172: Fixed-iteration Newton solve for T given (ρ, u). Scalar.
-- @jax.custom_jvp _temperature_from_Du(rho, u, phase_hint)  ·L198: T such that u(T, ρ) = u_target at fixed ρ. Scalar. (phase_hint unused.)
-- @_temperature_from_Du.defjvp _temperature_from_Du_jvp(primals, tangents)  ·L204: dT = (du − (∂u/∂ρ)·dρ) / Cv, with Cv and ∂u/∂ρ analytic.
-- _state_from_T_rho(T, rho)  ·L230: Scalar fused state at (T, ρ): every thermo + transport property.
-- _state_from_rho_u(rho, u, phase_hint)  ·L262: Scalar fused state from (ρ, u): solve T once, derive everything.
+- _thermo(T, rho)  ·L122: All ten Helmholtz-derived properties at scalar (T, ρ).
+- _u_and_cv(T, rho)  ·L159: Internal energy u [J/kg] and Cv [J/(kg·K)] at scalar (T, ρ).
+- _solve_T(rho, u)  ·L178: Fixed-iteration Newton solve for T given (ρ, u). Scalar.
+- @jax.custom_jvp _temperature_from_Du(rho, u, phase_hint)  ·L204: T such that u(T, ρ) = u_target at fixed ρ. Scalar. (phase_hint unused.)
+- @_temperature_from_Du.defjvp _temperature_from_Du_jvp(primals, tangents)  ·L210: dT = (du − (∂u/∂ρ)·dρ) / Cv, with Cv and ∂u/∂ρ analytic.
+- _state_from_T_rho(T, rho)  ·L236: Scalar fused state at (T, ρ): every thermo + transport property.
+- _state_from_rho_u(rho, u, phase_hint)  ·L270: Scalar fused state from (ρ, u): solve T once, derive everything.
 
 ### co2_eos/helmholtz.py
 _Span-Wagner (1996) reduced Helmholtz energy with hand-coded analytic_
@@ -566,6 +567,20 @@ _Guard: tracked prose and source carry no em dash (U+2014)._
 - const EXCLUDED  ·L14
 - _tracked_files()  ·L17
 - test_no_em_dash_in_tracked_text()  ·L24
+
+### tests/test_pressure_derivatives.py
+_The pressure derivatives in the full-state dict, and the batched (ρ, T) call._
+- const STATES  ·L21
+- const IDS  ·L26
+- _rel(a, b)  ·L32
+- _T_rho(P, T, hint)  ·L36
+- @pytest.mark.parametrize test_derivatives_match_autodiff_pressure(P, T, hint, label)  ·L43
+- @pytest.mark.parametrize test_thermodynamic_identities(P, T, hint, label)  ·L51
+- _batch()  ·L61
+- test_rho_T_batched_matches_vmap_scalar()  ·L67
+- test_rho_T_batched_rejects_bad_shapes()  ·L77
+- test_every_full_state_dict_carries_the_derivatives()  ·L84
+- test_derivatives_survive_jit_vmap_and_grad()  ·L105
 
 ### tests/test_rho_u_inversion.py
 _The (ρ, u) → T inversion and the fused properties_from_rho_u path._

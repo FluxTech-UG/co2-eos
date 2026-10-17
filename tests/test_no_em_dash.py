@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-EM_DASH = "—"
+EM_DASH = "\u2014"  # escaped so this file passes its own guard
 SUFFIXES = {".md", ".py", ".yml", ".yaml", ".toml", ".html", ".css"}
 EXCLUDED = {"docs/MAP.md"}
 
