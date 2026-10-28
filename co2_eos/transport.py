@@ -2,6 +2,8 @@
 
 Viscosity:            Laesecke & Muzny, JPCRD 46, 013107 (2017)
 Thermal conductivity: Huber, Sykioti, Assael & Perkins, JPCRD 45, 013102 (2016)
+Bulk viscosity:       vibrational relaxation (Lin & Trusler, JCED 59, 4099 (2014))
+                      plus the critical part (Onuki, PRE 76, 061126 (2007))
 
 Coefficients cross-referenced against CoolProp's CarbonDioxide.json and
 TransportRoutines.cpp.  CoolProp is never imported here.
@@ -185,7 +187,7 @@ _R0 = 1.02             # CO₂-specific amplitude ratio
 _GAMMA_CE = 0.052      # CO₂-specific
 _GAMMA_EXP = 1.239     # universal critical exponent γ
 _NU = 0.63             # universal critical exponent ν
-_ZETA0 = 1.5e-10       # m
+_XI0 = 1.5e-10         # m, correlation-length amplitude ξ₀
 _QD = 2.5e9            # 1/m
 _T_REF = 456.19        # K
 
@@ -230,6 +232,39 @@ def _dpdrho_ref_reduced(delta):
     return x * b1 - b2 + float(np.asarray(_CHI_COEFS)[0])
 
 
+def _correlation_length_and_excess(T, rho, alr_d, alr_dd):
+    """Olchowy-Sengers correlation length ξ [m] and the susceptibility excess.
+
+    ξ = ξ₀ (Δχ̃/Γ)^(ν/γ) with Δχ̃ = χ̃(T, ρ) − χ̃(T_ref, ρ) T_ref/T, and ξ = 0
+    where Δχ̃ ≤ 0.  Shared by the conductivity enhancement and the critical
+    bulk viscosity, so both read one ξ.  Takes αʳ_δ and αʳ_δδ at (T, ρ).
+
+    The power is taken on a double-``where`` guard: the non-positive branch
+    feeds the power a placeholder 1, so its derivative is finite and the
+    zero-ξ region carries a zero gradient instead of 0·∞ = NaN.
+
+    Returns (ξ, Δχ̃).
+    """
+    rho_molar = rho / M
+    delta = rho_molar / RHOC_MOLAR        # == rho / RHOC_MASS
+
+    # ── dp/dρ at (T, ρ) ──
+    dp_drho_mol = R_MOLAR * T * (1.0 + 2.0 * delta * alr_d
+                                  + delta ** 2 * alr_dd)
+    chi = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_mol
+
+    # ── dp/dρ at reference temperature T_ref (same δ; precomputed fit) ──
+    dp_drho_ref = R_MOLAR * _T_REF * _dpdrho_ref_reduced(delta)
+    chi_ref = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_ref * _T_REF / T
+
+    diff = chi - chi_ref
+    positive = diff > 0.0
+    diff_pos = jnp.where(positive, diff, 1.0)
+    xi = jnp.where(positive,
+                   _XI0 * (diff_pos / _GAMMA_CE) ** (_NU / _GAMMA_EXP), 0.0)
+    return xi, diff
+
+
 def _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt):
     """Critical enhancement of thermal conductivity [W/(m·K)].
 
@@ -245,21 +280,11 @@ def _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt):
     tau = TC / T
     delta = rho_molar / RHOC_MOLAR        # == rho / RHOC_MASS
 
-    # ── dp/dρ at (T, ρ) ──
-    dp_drho_mol = R_MOLAR * T * (1.0 + 2.0 * delta * alr_d
-                                  + delta ** 2 * alr_dd)
-    chi = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_mol
-
-    # ── dp/dρ at reference temperature T_ref (same δ; precomputed fit) ──
-    dp_drho_ref = R_MOLAR * _T_REF * _dpdrho_ref_reduced(delta)
-    chi_ref = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_ref * _T_REF / T
-
-    diff = chi - chi_ref
-
-    # ── Correlation length ζ ──
-    # Use safe branch: if diff < 0, set zeta to 0 (no enhancement)
-    diff_safe = jnp.maximum(diff, 0.0)
-    zeta = _ZETA0 * (diff_safe / _GAMMA_CE) ** (_NU / _GAMMA_EXP)
+    xi, diff = _correlation_length_and_excess(T, rho, alr_d, alr_dd)
+    # Where ξ = 0 the result is zeroed below; evaluate that branch at a
+    # placeholder ξ so its derivative is finite (1/ξ at ξ = 0 gave a NaN
+    # gradient through the final ``where``).  Values where ξ > 0 are unchanged.
+    xi = jnp.where(diff > 0.0, xi, _XI0)
 
     # ── Molar heat capacities from the shared EOS derivatives ──
     cv_over_R = -tau ** 2 * (al0_tt + alr_tt)
@@ -271,22 +296,22 @@ def _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt):
     cp_molar = R_MOLAR * cp_over_R
 
     # ── Ω functions ──
-    qd_zeta = _QD * zeta
-    inv_qd_zeta = 1.0 / jnp.maximum(qd_zeta, 1e-300)
+    qd_xi = _QD * xi
+    inv_qd_xi = 1.0 / jnp.maximum(qd_xi, 1e-300)
 
     omega = (2.0 / jnp.pi) * (
-        (cp_molar - cv_molar) / cp_molar * jnp.arctan(qd_zeta)
-        + cv_molar / cp_molar * qd_zeta
+        (cp_molar - cv_molar) / cp_molar * jnp.arctan(qd_xi)
+        + cv_molar / cp_molar * qd_xi
     )
     omega0 = (2.0 / jnp.pi) * (
-        1.0 - jnp.exp(-1.0 / (inv_qd_zeta
-                                + (qd_zeta) ** 2 / (3.0 * delta ** 2)))
+        1.0 - jnp.exp(-1.0 / (inv_qd_xi
+                                + (qd_xi) ** 2 / (3.0 * delta ** 2)))
     )
 
     # ── Critical enhancement ──
-    zeta_safe = jnp.maximum(zeta, 1e-300)
+    xi_safe = jnp.maximum(xi, 1e-300)
     lam_c = (rho_molar * cp_molar * _R0 * _KB * T
-             / (6.0 * jnp.pi * mu * zeta_safe)
+             / (6.0 * jnp.pi * mu * xi_safe)
              * (omega - omega0))
 
     # Zero out when diff <= 0 (no enhancement)
@@ -321,6 +346,98 @@ def _scalar_thermal_conductivity(T, rho):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# BULK VISCOSITY: vibrational relaxation + critical part
+# ═══════════════════════════════════════════════════════════════════════════
+# ζ = ζ_vib + ζ_crit, both zero-frequency (Newtonian) coefficients, valid while
+# ω·τ₁₁ ≪ 1 (single-phase CO₂, about 270 to 500 K, ρ below 1200 kg/m³).  The
+# rotational and configurational part, O(μ), is below 0.1 % of ζ_vib and is
+# not included.  Pure CO₂: no catalytic shortening of τ₁₁ by water.
+
+# ── Vibrational relaxation time τ₁₁: Lin & Trusler (2014), Eqs. 3 to 7 ──
+_P11_A = 9.46e-6        # collision transition probability prefactor
+_P11_T = 252.0          # K, its exponential temperature scale
+_SIGMA_HS = 0.355e-9    # m, hard-sphere diameter of the collision model
+_A_MFP = 1.852          # Madigosky-Litovitz dense mean-free-path coefficient
+_RHO_MFP_SWITCH = 896.0  # kg/m³, where the dilute and dense paths are equal
+_RHO_MFP_WIDTH = 10.0   # kg/m³, width of the smooth switch between them
+
+# ── Critical part: Onuki (2007), Appendix B, low-frequency limit ──
+_R_B = 0.03             # universal amplitude, ζ_crit = R_B ρ c² t_ξ
+
+
+def _vibrational_relaxation_time(T, rho):
+    """Isothermal vibrational relaxation time τ₁₁ [s] at scalar (T, ρ).
+
+    1/τ₁₁ = (v̄/λ)·P₁₁ with the mean speed v̄ = √(8RT/(πM)) and
+    P₁₁ = 9.46e-6·exp(T/252 K).  The mean free path λ is the dilute
+    hard-sphere 1/(√2πσ²n) below ρ = 896 kg/m³ and the Madigosky-Litovitz
+    a(n^(−1/3) − σ) above it.  The two are equal at that density, and the
+    switch is written as a logistic blend in ρ of width 10 kg/m³ so τ₁₁ is
+    smooth (finite jvp and grad everywhere); it departs from the hard switch
+    by under 1e-4 relative below 820 kg/m³.
+
+    Note the two paths also cross near 200 kg/m³, so the switch is not
+    max(λ_dil, λ_dense): between the crossings the dense path is the larger.
+    """
+    n = rho / M * _NA
+    v_mean = jnp.sqrt(8.0 * R_MOLAR * T / (jnp.pi * M))
+    lam_dilute = 1.0 / (jnp.sqrt(2.0) * jnp.pi * _SIGMA_HS ** 2 * n)
+    lam_dense = _A_MFP * (n ** (-1.0 / 3.0) - _SIGMA_HS)
+    w = jax.nn.sigmoid((rho - _RHO_MFP_SWITCH) / _RHO_MFP_WIDTH)
+    lam = (1.0 - w) * lam_dilute + w * lam_dense
+    p11 = _P11_A * jnp.exp(T / _P11_T)
+    return lam / (v_mean * p11)
+
+
+def _bulk_viscosity_parts(T, rho, mu, w, cp, cv, al0_tt, xi):
+    """(ζ_vib, ζ_crit, τ₁₁) at scalar (T, ρ) from quantities already at hand.
+
+    ζ_vib = ρc²(γ − 1)Δ(1 − Δ)τ₁₁ with γ = c_p/c_v and Δ = c_vib/c_p: the
+    low-frequency limit of the single-relaxation-time absorption (Lin &
+    Trusler 2014, Eq. 1).  c_vib = c_v⁰ − (5/2)R/M is the ideal-gas isochoric
+    heat capacity less its translational and rotational parts, from the
+    Span-Wagner ideal part (c_v⁰/R = −τ²α⁰_ττ).  c, c_p, c_v are the
+    equilibrium EOS values.
+
+    ζ_crit = R_B ρc² t_ξ with t_ξ = 6πμξ³/(k_B T) (Onuki 2007, B4), ξ the
+    Olchowy-Sengers correlation length and μ the background viscosity
+    (Laesecke-Muzny carries no critical enhancement).  ζ_crit = 0 where ξ = 0.
+    """
+    tau_red = TC / T
+    r_mass = R_MOLAR / M
+    c_vib = r_mass * (-tau_red ** 2 * al0_tt - 2.5)
+    frac = c_vib / cp
+    gamma = cp / cv
+    rho_c2 = rho * w * w
+    tau11 = _vibrational_relaxation_time(T, rho)
+    zeta_vib = rho_c2 * (gamma - 1.0) * frac * (1.0 - frac) * tau11
+    t_xi = 6.0 * jnp.pi * mu * xi ** 3 / (_KB * T)
+    zeta_crit = _R_B * rho_c2 * t_xi
+    return zeta_vib, zeta_crit, tau11
+
+
+def _bulk_viscosity_shared(T, rho, mu, w, cp, cv, al0_tt, xi):
+    """ζ [Pa·s] reusing quantities the fused (T, ρ) path already computed."""
+    zeta_vib, zeta_crit, _ = _bulk_viscosity_parts(T, rho, mu, w, cp, cv,
+                                                   al0_tt, xi)
+    return zeta_vib + zeta_crit
+
+
+def _scalar_bulk_viscosity(T, rho):
+    """Bulk viscosity ζ [Pa·s] at scalar (T, ρ [kg/m³]).
+
+    The equilibrium c, c_p, c_v come from the thermo kernel in ``core``
+    (imported here, at trace time, since ``core`` imports this module).
+    """
+    from co2_eos.core import _thermo
+    (_, cv, cp, w, *_), aux = _thermo(T, rho)
+    ar_d, ar_dd, _, _, a0_tt = aux
+    mu = _scalar_viscosity(T, rho)
+    xi, _ = _correlation_length_and_excess(T, rho, ar_d, ar_dd)
+    return _bulk_viscosity_shared(T, rho, mu, w, cp, cv, a0_tt, xi)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Public API: batched, JIT-compiled
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -350,3 +467,17 @@ def thermal_conductivity(T, rho):
         λ [W/(m·K)], same shape as inputs
     """
     return jax.vmap(_scalar_thermal_conductivity)(T, rho)
+
+
+@jax.jit
+def bulk_viscosity(T, rho):
+    """Bulk viscosity ζ [Pa·s]. Batched over leading axis.
+
+    Args:
+        T: temperature [K], 1-D array
+        rho: mass density [kg/m³], 1-D array
+
+    Returns:
+        ζ [Pa·s], same shape as inputs
+    """
+    return jax.vmap(_scalar_bulk_viscosity)(T, rho)

@@ -31,7 +31,9 @@ Each full-state dict has keys: ``temperature`` [K], ``density`` [kg/m³],
 ``pressure`` [Pa], ``cv`` and ``cp`` [J/(kg·K)], ``speed_of_sound`` [m/s],
 ``enthalpy``, ``internal_energy`` and ``gibbs_energy`` [J/kg], ``entropy``
 [J/(kg·K)], ``dP_dT_rho`` ((∂P/∂T)_ρ [Pa/K]), ``dP_drho_T`` ((∂P/∂ρ)_T
-[Pa·m³/kg]), ``viscosity`` [Pa·s], ``thermal_conductivity`` [W/(m·K)].
+[Pa·m³/kg]), ``viscosity`` [Pa·s], ``thermal_conductivity`` [W/(m·K)],
+``bulk_viscosity`` [Pa·s] (ζ = ζ_vib + ζ_crit) and
+``bulk_viscosity_vibrational`` [Pa·s] (its vibrational part ζ_vib alone).
 
 Saturation curve (cubic-spline interpolation of a precomputed Maxwell table)::
 
@@ -44,6 +46,7 @@ Transport (scalar; vmap for batches)::
 
     viscosity(T, rho)               → μ  [Pa·s]
     thermal_conductivity(T, rho)    → λ  [W/(m·K)]
+    bulk_viscosity(T, rho)          → ζ  [Pa·s]  (vibrational + critical)
 
 Phase hints::
 
@@ -59,7 +62,7 @@ import jax.numpy as jnp
 # Enable float64 for the entire library (also done by submodules).
 jax.config.update("jax_enable_x64", True)
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 # ── Phase hint constants ────────────────────────────────────────────────────
 LIQUID = 0
@@ -101,6 +104,20 @@ def thermal_conductivity(T, rho):
     T = jnp.asarray(T, dtype=jnp.float64)
     rho = jnp.asarray(rho, dtype=jnp.float64)
     return _tr._scalar_thermal_conductivity(T, rho)
+
+
+@jax.jit
+def bulk_viscosity(T, rho):
+    """Bulk viscosity ζ [Pa·s] at scalar (T, ρ). vmap for batches.
+
+    ζ = ζ_vib + ζ_crit, the zero-frequency coefficient: vibrational relaxation
+    (Lin & Trusler 2014, pure CO₂) plus the critical part (Onuki 2007,
+    R_B = 0.03) on the Olchowy-Sengers correlation length the conductivity
+    enhancement uses.  Valid while ω·τ₁₁ ≪ 1, single phase, 270 to 500 K.
+    """
+    T = jnp.asarray(T, dtype=jnp.float64)
+    rho = jnp.asarray(rho, dtype=jnp.float64)
+    return _tr._scalar_bulk_viscosity(T, rho)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -255,5 +272,5 @@ __all__ = [
     "saturation_densities", "saturation_densities_P",
     "saturation_enthalpies", "saturation_enthalpies_P",
     "saturation_entropies", "saturation_entropies_P",
-    "viscosity", "thermal_conductivity",
+    "viscosity", "thermal_conductivity", "bulk_viscosity",
 ]

@@ -159,6 +159,7 @@ CO2-EOS is validated against CoolProp across the full valid range. The test suit
 - Single-phase properties on a dense (T, ρ) grid spanning gas, liquid, and supercritical regions
 - Saturation curve properties from triple point to near-critical
 - Transport properties (viscosity and thermal conductivity) across all phases
+- Bulk viscosity (0.5.0) against a reference table at nine near-critical and supercritical states, the dilute limit against Cramer (2012), and finite forward and reverse gradients (`tests/test_bulk_viscosity.py`)
 - Inversions (P,T → ρ), (P,h → state), (ρ,u → state) including near-critical conditions
 - Comparison of all Helmholtz derivatives against CoolProp's analytical values
 

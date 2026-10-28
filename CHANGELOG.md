@@ -2,6 +2,51 @@
 
 All notable changes to co2-eos are documented here.
 
+## [0.5.0] - 2026-10-28
+
+New transport property: the bulk viscosity ζ(ρ, T). Existing keys, values and
+signatures are unchanged, except that the conductivity gradient is now finite
+where it was NaN (see Fixed).
+
+### Added
+
+- **`bulk_viscosity(T, rho)`** (scalar in `co2_eos`, batched in
+  `co2_eos.transport`) and the key **`bulk_viscosity`** [Pa·s] in every
+  full-state dict (`properties`, `properties_from_rho_u`,
+  `properties_from_rho_T`, `state_from_PT`, `state_from_Ph`, `state_from_Du`),
+  with **`bulk_viscosity_vibrational`** (ζ_vib alone) beside it for a consumer
+  that gates the critical part off. ζ = ζ_vib + ζ_crit, the zero-frequency (Newtonian) coefficient:
+  - ζ_vib = ρc²(γ − 1)Δ(1 − Δ)τ₁₁ with Δ = c_vib/c_p and
+    c_vib = c_v⁰ − (5/2)R/M from the Span-Wagner ideal part; τ₁₁ is the
+    Lin and Trusler (2014) collision model, pure CO₂, with their dilute and
+    dense (Madigosky-Litovitz) mean free paths joined by a logistic switch of
+    width 10 kg/m³ at the 896 kg/m³ crossing, so it is differentiable.
+  - ζ_crit = R_B ρc² · 6πμξ³/(k_B T), Onuki (2007) with R_B = 0.03, on the
+    Olchowy-Sengers ξ the conductivity enhancement uses; zero where ξ = 0.
+  - The rotational and configurational part (below 0.1 % of ζ_vib) is not
+    included. Valid while ω·τ₁₁ ≪ 1, single phase, about 270 to 500 K.
+  In the fused path ζ reuses c, c_p, c_v, α⁰_ττ, μ and ξ.
+- New `tests/test_bulk_viscosity.py`: a nine-state reference table
+  (9.1 MPa, 296 to 500 K; 7.5 MPa, 305 K) to its printed rounding; τ₁₁ at
+  1 atm within 15 % of Cramer (2012) at 300, 450 and 500 K, and ζ/μ at 300 K
+  within a factor 1.5 of Cramer's 3849; ζ_crit = 0 where ξ = 0;
+  ω·τ₁₁ < 0.05 at 110 kHz; the smooth switch within 1e-4 of the hard one
+  below 821 kg/m³; finite jvp and grad that agree.
+
+### Changed
+
+- The correlation length is one function,
+  `transport._correlation_length_and_excess`, read by the conductivity
+  enhancement and the bulk viscosity. Its local name in the conductivity
+  code was `zeta`; it is now `xi` (and `_ZETA0` is `_XI0`).
+
+### Fixed
+
+- **`thermal_conductivity` gradient was NaN where ξ = 0** (for example
+  500 K, 102 kg/m³): `max(Δχ, 0)**(ν/γ)` and `1/max(ξ, 1e-300)` gave 0·∞
+  through the final `where`. Both are now evaluated on placeholder values
+  in the zero branch (double `where`); values are bit-identical.
+
 ## [0.4.0] - 2026-10-17
 
 New API surface: the two pressure derivatives a temperature-form energy

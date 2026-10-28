@@ -238,17 +238,23 @@ def _state_from_T_rho(T, rho):
 
     One analytic residual-derivative pass feeds both the thermodynamics and the
     transport critical-enhancement term (viscosity needs no Helmholtz
-    derivatives; conductivity reuses the bundle plus a reference-T δ-pair).
+    derivatives; conductivity reuses the bundle plus a reference-T δ-pair;
+    bulk viscosity reuses c, c_p, c_v, α⁰_ττ, μ and the same correlation
+    length ξ).
 
     Keys: temperature, density, pressure, internal_energy, cv, cp,
     speed_of_sound, enthalpy, entropy, gibbs_energy, dP_dT_rho, dP_drho_T,
-    viscosity, thermal_conductivity.
+    viscosity, thermal_conductivity, bulk_viscosity,
+    bulk_viscosity_vibrational.
     """
     (P, cv, cp, w, h, u, s, g, dP_dT_rho, dP_drho_T), aux = _thermo(T, rho)
     ar_d, ar_dd, ar_tt, ar_dt, a0_tt = aux
     mu = _tr._scalar_viscosity(T, rho)
     lam = _tr._thermal_conductivity_shared(T, rho, mu, ar_d, ar_dd, ar_tt,
                                            ar_dt, a0_tt)
+    xi, _ = _tr._correlation_length_and_excess(T, rho, ar_d, ar_dd)
+    zeta_vib, zeta_crit, _ = _tr._bulk_viscosity_parts(T, rho, mu, w, cp, cv,
+                                                       a0_tt, xi)
     return {
         "temperature": T,
         "density": rho,
@@ -264,6 +270,8 @@ def _state_from_T_rho(T, rho):
         "dP_drho_T": dP_drho_T,
         "viscosity": mu,
         "thermal_conductivity": lam,
+        "bulk_viscosity": zeta_vib + zeta_crit,
+        "bulk_viscosity_vibrational": zeta_vib,
     }
 
 

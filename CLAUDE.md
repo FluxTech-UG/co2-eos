@@ -14,7 +14,7 @@ current symbol-level inventory. The shape:
 - `co2_eos/`: the importable package. `__init__.py` is the **public API surface**: the
   hot path `properties_from_rho_u(ρ, u)`, the scalar `state_from_Du`, `properties(T, ρ)`,
   `state_from_PT`, `state_from_Ph`, `density_from_PT`, `viscosity`,
-  `thermal_conductivity`, and the phase constants. Internals: `span_wagner.py` (the EOS
+  `thermal_conductivity`, `bulk_viscosity`, and the phase constants. Internals: `span_wagner.py` (the EOS
   and analytic α-derivatives), `helmholtz.py`, `core.py` (the fused (ρ, u)
   primitive-recovery kernel), `inversions.py`, `saturation.py`, `transport.py`, and the
   precomputed saturation/seed tables in `co2_eos/data/`.
