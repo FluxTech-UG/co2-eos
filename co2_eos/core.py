@@ -252,7 +252,12 @@ def _state_from_T_rho(T, rho):
     mu = _tr._scalar_viscosity(T, rho)
     lam = _tr._thermal_conductivity_shared(T, rho, mu, ar_d, ar_dd, ar_tt,
                                            ar_dt, a0_tt)
-    xi, _ = _tr._correlation_length_and_excess(T, rho, ar_d, ar_dd)
+    # ζ reads the same factored ξ, evaluated on its own copy of the inputs:
+    # left to share the conductivity's ξ, XLA fuses the enhancement
+    # differently and moves its last bits, and every property but ζ is kept
+    # bit for bit against 0.4.0 (a consumer's committed runs reproduce).
+    xi, _ = _tr._correlation_length_and_excess(
+        *jax.lax.optimization_barrier((T, rho, ar_d, ar_dd)))
     zeta_vib, zeta_crit, _ = _tr._bulk_viscosity_parts(T, rho, mu, w, cp, cv,
                                                        a0_tt, xi)
     return {

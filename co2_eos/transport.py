@@ -232,6 +232,30 @@ def _dpdrho_ref_reduced(delta):
     return x * b1 - b2 + float(np.asarray(_CHI_COEFS)[0])
 
 
+@jax.custom_jvp
+def _xi_of_excess(diff):
+    """ξ = ξ₀ (max(Δχ̃, 0)/Γ)^(ν/γ) [m], zero where Δχ̃ ≤ 0.
+
+    The value is the operations the 0.4.0 enhancement used, so every property
+    built on it keeps its bits.  The derivative is supplied: the power's own
+    derivative at Δχ̃ = 0 is infinite and its product with the clamp's zero
+    is NaN, so the tangent is (ν/γ) ξ/Δχ̃ where Δχ̃ > 0 and 0 elsewhere.
+    """
+    diff_safe = jnp.maximum(diff, 0.0)
+    return _XI0 * (diff_safe / _GAMMA_CE) ** (_NU / _GAMMA_EXP)
+
+
+@_xi_of_excess.defjvp
+def _xi_of_excess_jvp(primals, tangents):
+    (diff,), (ddiff,) = primals, tangents
+    xi = _xi_of_excess(diff)
+    positive = diff > 0.0
+    slope = jnp.where(positive,
+                      (_NU / _GAMMA_EXP) * xi / jnp.where(positive, diff, 1.0),
+                      0.0)
+    return xi, slope * ddiff
+
+
 def _correlation_length_and_excess(T, rho, alr_d, alr_dd):
     """Olchowy-Sengers correlation length ξ [m] and the susceptibility excess.
 
@@ -239,9 +263,7 @@ def _correlation_length_and_excess(T, rho, alr_d, alr_dd):
     where Δχ̃ ≤ 0.  Shared by the conductivity enhancement and the critical
     bulk viscosity, so both read one ξ.  Takes αʳ_δ and αʳ_δδ at (T, ρ).
 
-    The power is taken on a double-``where`` guard: the non-positive branch
-    feeds the power a placeholder 1, so its derivative is finite and the
-    zero-ξ region carries a zero gradient instead of 0·∞ = NaN.
+    ξ(Δχ̃) is :func:`_xi_of_excess`, whose derivative is finite where ξ = 0.
 
     Returns (ξ, Δχ̃).
     """
@@ -258,33 +280,25 @@ def _correlation_length_and_excess(T, rho, alr_d, alr_dd):
     chi_ref = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_ref * _T_REF / T
 
     diff = chi - chi_ref
-    positive = diff > 0.0
-    diff_pos = jnp.where(positive, diff, 1.0)
-    xi = jnp.where(positive,
-                   _XI0 * (diff_pos / _GAMMA_CE) ** (_NU / _GAMMA_EXP), 0.0)
-    return xi, diff
+    return _xi_of_excess(diff), diff
 
 
-def _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt):
-    """Critical enhancement of thermal conductivity [W/(m·K)].
+def _lambda_critical_formula(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt,
+                             guarded):
+    """The enhancement's formula; ``guarded`` (static) is its derivative form.
 
-    Takes the reduced residual derivatives αʳ_δ, αʳ_δδ, αʳ_ττ, αʳ_δτ and the
-    ideal α⁰_ττ at (T, ρ); the caller (thermo kernel or fused (ρ, u) path)
-    has already computed these, so the enhancement adds only the reference-T
-    δ-derivative pair.  μ [Pa·s] is passed in to avoid a circular dependency.
-
-    The reduced derivatives are identical whether δ is formed from molar or
-    mass density (δ = ρ/ρc dimensionless), so the shared values apply directly.
+    Unguarded it is the enhancement's value, the 0.4.0 operations bit for bit.
+    Guarded, the zeroed branch (ξ = 0) is evaluated at a placeholder ξ, so 1/ξ
+    there is finite and the final ``where`` passes a zero tangent rather than
+    0·∞ = NaN; where ξ > 0 the two agree.
     """
     rho_molar = rho / M
     tau = TC / T
     delta = rho_molar / RHOC_MOLAR        # == rho / RHOC_MASS
 
     xi, diff = _correlation_length_and_excess(T, rho, alr_d, alr_dd)
-    # Where ξ = 0 the result is zeroed below; evaluate that branch at a
-    # placeholder ξ so its derivative is finite (1/ξ at ξ = 0 gave a NaN
-    # gradient through the final ``where``).  Values where ξ > 0 are unchanged.
-    xi = jnp.where(diff > 0.0, xi, _XI0)
+    if guarded:
+        xi = jnp.where(diff > 0.0, xi, _XI0)
 
     # ── Molar heat capacities from the shared EOS derivatives ──
     cv_over_R = -tau ** 2 * (al0_tt + alr_tt)
@@ -316,6 +330,31 @@ def _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt):
 
     # Zero out when diff <= 0 (no enhancement)
     return jnp.where(diff > 0.0, lam_c, 0.0)
+
+
+@jax.custom_jvp
+def _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt):
+    """Critical enhancement of thermal conductivity [W/(m·K)].
+
+    Takes the reduced residual derivatives αʳ_δ, αʳ_δδ, αʳ_ττ, αʳ_δτ and the
+    ideal α⁰_ττ at (T, ρ); the caller (thermo kernel or fused (ρ, u) path)
+    has already computed these, so the enhancement adds only the reference-T
+    δ-derivative pair.  μ [Pa·s] is passed in to avoid a circular dependency.
+
+    The reduced derivatives are identical whether δ is formed from molar or
+    mass density (δ = ρ/ρc dimensionless), so the shared values apply directly.
+    """
+    return _lambda_critical_formula(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt,
+                                    al0_tt, guarded=False)
+
+
+@_lambda_critical_shared.defjvp
+def _lambda_critical_shared_jvp(primals, tangents):
+    """The value from the plain formula, the tangent from the guarded one."""
+    value = _lambda_critical_shared(*primals)
+    _, tangent = jax.jvp(
+        lambda *a: _lambda_critical_formula(*a, guarded=True), primals, tangents)
+    return value, tangent
 
 
 # ── Scalar thermal conductivity ──────────────────────────────────────────

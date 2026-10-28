@@ -44,8 +44,12 @@ where it was NaN (see Fixed).
 
 - **`thermal_conductivity` gradient was NaN where ξ = 0** (for example
   500 K, 102 kg/m³): `max(Δχ, 0)**(ν/γ)` and `1/max(ξ, 1e-300)` gave 0·∞
-  through the final `where`. Both are now evaluated on placeholder values
-  in the zero branch (double `where`); values are bit-identical.
+  through the final `where`. ξ(Δχ) and the enhancement are now `custom_jvp`
+  functions whose values are the 0.4.0 operations and whose tangents are
+  taken on a guarded form (zero where ξ = 0). Every 0.4.0 key keeps its
+  values bit for bit on CPU, in the fused path too (ζ reads ξ through an
+  `optimization_barrier`, since sharing it changed XLA's fusion of the
+  enhancement); the conductivity's tangent moves at round-off (1e-13).
 
 ## [0.4.0] - 2026-10-17
 
