@@ -164,20 +164,21 @@ _Validation harness: the fast (ρ, u) path vs an independent reference chain._
 
 ### co2_eos/__init__.py
 _CO2-EOS: Differentiable CO₂ thermodynamic properties in JAX._
-- const LIQUID  ·L65
-- const VAPOR  ·L66
-- const SUPERCRITICAL  ·L67
-- const AUTO  ·L68
-- @jax.jit viscosity(T, rho)  ·L91: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
-- @jax.jit thermal_conductivity(T, rho)  ·L99: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
-- @jax.jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)  ·L111: Full thermodynamic + transport state from (ρ, u). Batched.
-- @jax.jit properties_from_rho_T(rho, T)  ·L140: Full thermodynamic + transport state from (ρ, T). Batched.
-- @jax.jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)  ·L167: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
-- @jax.jit properties(T, rho)  ·L185: Full thermodynamic + transport state at scalar (T, ρ).
-- @jax.jit state_from_PT(P, T, phase_hint=AUTO)  ·L196: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
-- @jax.jit density_from_PT(P, T, phase_hint=AUTO)  ·L211: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
-- @jax.jit state_from_Ph(P, h, phase_hint=AUTO)  ·L220: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
-- @jax.jit state_from_Du(rho, u, phase_hint=AUTO)  ·L236: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
+- const LIQUID  ·L68
+- const VAPOR  ·L69
+- const SUPERCRITICAL  ·L70
+- const AUTO  ·L71
+- @jax.jit viscosity(T, rho)  ·L94: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
+- @jax.jit thermal_conductivity(T, rho)  ·L102: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
+- @jax.jit bulk_viscosity(T, rho)  ·L110: Bulk viscosity ζ [Pa·s] at scalar (T, ρ). vmap for batches.
+- @jax.jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)  ·L128: Full thermodynamic + transport state from (ρ, u). Batched.
+- @jax.jit properties_from_rho_T(rho, T)  ·L157: Full thermodynamic + transport state from (ρ, T). Batched.
+- @jax.jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)  ·L184: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
+- @jax.jit properties(T, rho)  ·L202: Full thermodynamic + transport state at scalar (T, ρ).
+- @jax.jit state_from_PT(P, T, phase_hint=AUTO)  ·L213: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
+- @jax.jit density_from_PT(P, T, phase_hint=AUTO)  ·L228: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
+- @jax.jit state_from_Ph(P, h, phase_hint=AUTO)  ·L237: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
+- @jax.jit state_from_Du(rho, u, phase_hint=AUTO)  ·L253: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
 
 ### co2_eos/core.py
 _Redesigned high-performance EOS core: analytic derivatives, fused passes._
@@ -194,7 +195,7 @@ _Redesigned high-performance EOS core: analytic derivatives, fused passes._
 - @jax.custom_jvp _temperature_from_Du(rho, u, phase_hint)  ·L204: T such that u(T, ρ) = u_target at fixed ρ. Scalar. (phase_hint unused.)
 - @_temperature_from_Du.defjvp _temperature_from_Du_jvp(primals, tangents)  ·L210: dT = (du − (∂u/∂ρ)·dρ) / Cv, with Cv and ∂u/∂ρ analytic.
 - _state_from_T_rho(T, rho)  ·L236: Scalar fused state at (T, ρ): every thermo + transport property.
-- _state_from_rho_u(rho, u, phase_hint)  ·L270: Scalar fused state from (ρ, u): solve T once, derive everything.
+- _state_from_rho_u(rho, u, phase_hint)  ·L283: Scalar fused state from (ρ, u): solve T once, derive everything.
 
 ### co2_eos/helmholtz.py
 _Span-Wagner (1996) reduced Helmholtz energy with hand-coded analytic_
@@ -357,51 +358,68 @@ _Span-Wagner (1996) equation of state for CO₂: pure JAX implementation._
 
 ### co2_eos/transport.py
 _CO₂ transport property correlations: pure JAX implementation._
-- const TC  ·L21
-- const RHOC_MOLAR  ·L22
-- const M  ·L23
-- const R_MOLAR  ·L24
-- const PC  ·L25
-- const RHOC_MASS  ·L26
-- const _ETA0_A  ·L43
-- _eta_dilute(T)  ·L54: Dilute-gas viscosity η₀(T) [Pa·s].
-- const _EPSILON_OVER_K  ·L72
-- const _SIGMA  ·L73
-- const _NA  ·L74
-- const _RF_B  ·L76
-- const _RF_T  ·L80
-- _eta_initial(T, rho_molar, eta0)  ·L83: Initial-density viscosity contribution [Pa·s].
-- const _TT  ·L106
-- const _RHO_TL  ·L107
-- const _C1  ·L108
-- const _C2  ·L109
-- const _GAMMA_VISC  ·L110
-- const _ETA_TL  ·L113
-- _eta_residual(T, rho_mass)  ·L118: Higher-order viscosity contribution [Pa·s].
-- _scalar_viscosity(T, rho)  ·L129: Dynamic viscosity μ [Pa·s] at scalar (T, ρ [kg/m³]).
-- const _LAM0_L  ·L143
-- _lambda_dilute(T)  ·L146: Dilute-gas thermal conductivity λ₀(T) [W/(m·K)].
-- const _LAM_RES_B  ·L156
-- const _LAM_RES_D  ·L160
-- const _LAM_RES_T  ·L161
-- const _RHOMASS_REDUCING  ·L163
-- _lambda_residual(T, rho)  ·L166: Residual thermal conductivity [W/(m·K)].
-- const _KB  ·L183
-- const _R0  ·L184
-- const _GAMMA_CE  ·L185
-- const _GAMMA_EXP  ·L186
-- const _NU  ·L187
-- const _ZETA0  ·L188
-- const _QD  ·L189
-- const _T_REF  ·L190
-- const _CHI_PATH  ·L198
-- const _HAVE_CHI_CHEB  ·L199
-- _dpdrho_ref_reduced(delta)  ·L214: 1 + 2δ·αʳ_δ + δ²·αʳ_δδ at T_ref: Chebyshev-Clenshaw (or exact fallback).
-- _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt)  ·L233: Critical enhancement of thermal conductivity [W/(m·K)].
-- _thermal_conductivity_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt)  ·L298: λ [W/(m·K)] reusing reduced derivatives already computed at (T, ρ).
-- _scalar_thermal_conductivity(T, rho)  ·L312: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ [kg/m³]).
-- @jax.jit viscosity(T, rho)  ·L328: Dynamic viscosity μ [Pa·s]. Batched over leading axis.
-- @jax.jit thermal_conductivity(T, rho)  ·L342: Thermal conductivity λ [W/(m·K)]. Batched over leading axis.
+- const TC  ·L23
+- const RHOC_MOLAR  ·L24
+- const M  ·L25
+- const R_MOLAR  ·L26
+- const PC  ·L27
+- const RHOC_MASS  ·L28
+- const _ETA0_A  ·L45
+- _eta_dilute(T)  ·L56: Dilute-gas viscosity η₀(T) [Pa·s].
+- const _EPSILON_OVER_K  ·L74
+- const _SIGMA  ·L75
+- const _NA  ·L76
+- const _RF_B  ·L78
+- const _RF_T  ·L82
+- _eta_initial(T, rho_molar, eta0)  ·L85: Initial-density viscosity contribution [Pa·s].
+- const _TT  ·L108
+- const _RHO_TL  ·L109
+- const _C1  ·L110
+- const _C2  ·L111
+- const _GAMMA_VISC  ·L112
+- const _ETA_TL  ·L115
+- _eta_residual(T, rho_mass)  ·L120: Higher-order viscosity contribution [Pa·s].
+- _scalar_viscosity(T, rho)  ·L131: Dynamic viscosity μ [Pa·s] at scalar (T, ρ [kg/m³]).
+- const _LAM0_L  ·L145
+- _lambda_dilute(T)  ·L148: Dilute-gas thermal conductivity λ₀(T) [W/(m·K)].
+- const _LAM_RES_B  ·L158
+- const _LAM_RES_D  ·L162
+- const _LAM_RES_T  ·L163
+- const _RHOMASS_REDUCING  ·L165
+- _lambda_residual(T, rho)  ·L168: Residual thermal conductivity [W/(m·K)].
+- const _KB  ·L185
+- const _R0  ·L186
+- const _GAMMA_CE  ·L187
+- const _GAMMA_EXP  ·L188
+- const _NU  ·L189
+- const _XI0  ·L190
+- const _QD  ·L191
+- const _T_REF  ·L192
+- const _CHI_PATH  ·L200
+- const _HAVE_CHI_CHEB  ·L201
+- _dpdrho_ref_reduced(delta)  ·L216: 1 + 2δ·αʳ_δ + δ²·αʳ_δδ at T_ref: Chebyshev-Clenshaw (or exact fallback).
+- @jax.custom_jvp _xi_of_excess(diff)  ·L236: ξ = ξ₀ (max(Δχ̃, 0)/Γ)^(ν/γ) [m], zero where Δχ̃ ≤ 0.
+- @_xi_of_excess.defjvp _xi_of_excess_jvp(primals, tangents)  ·L249
+- _correlation_length_and_excess(T, rho, alr_d, alr_dd)  ·L259: Olchowy-Sengers correlation length ξ [m] and the susceptibility excess.
+- _lambda_critical_formula(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt, guarded)  ·L286: The enhancement's formula; ``guarded`` (static) is its derivative form.
+- @jax.custom_jvp _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt)  ·L336: Critical enhancement of thermal conductivity [W/(m·K)].
+- @_lambda_critical_shared.defjvp _lambda_critical_shared_jvp(primals, tangents)  ·L352: The value from the plain formula, the tangent from the guarded one.
+- _thermal_conductivity_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt)  ·L362: λ [W/(m·K)] reusing reduced derivatives already computed at (T, ρ).
+- _scalar_thermal_conductivity(T, rho)  ·L376: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ [kg/m³]).
+- const _P11_A  ·L396
+- const _P11_T  ·L397
+- const _SIGMA_HS  ·L398
+- const _A_MFP  ·L399
+- const _RHO_MFP_SWITCH  ·L400
+- const _RHO_MFP_WIDTH  ·L401
+- const _R_B  ·L404
+- _vibrational_relaxation_time(T, rho)  ·L407: Isothermal vibrational relaxation time τ₁₁ [s] at scalar (T, ρ).
+- _bulk_viscosity_parts(T, rho, mu, w, cp, cv, al0_tt, xi)  ·L431: (ζ_vib, ζ_crit, τ₁₁) at scalar (T, ρ) from quantities already at hand.
+- _bulk_viscosity_shared(T, rho, mu, w, cp, cv, al0_tt, xi)  ·L458: ζ [Pa·s] reusing quantities the fused (T, ρ) path already computed.
+- _scalar_bulk_viscosity(T, rho)  ·L465: Bulk viscosity ζ [Pa·s] at scalar (T, ρ [kg/m³]).
+- @jax.jit viscosity(T, rho)  ·L484: Dynamic viscosity μ [Pa·s]. Batched over leading axis.
+- @jax.jit thermal_conductivity(T, rho)  ·L498: Thermal conductivity λ [W/(m·K)]. Batched over leading axis.
+- @jax.jit bulk_viscosity(T, rho)  ·L512: Bulk viscosity ζ [Pa·s]. Batched over leading axis.
 
 ### examples/readme_check.py
 _Run every Python snippet from README.md and print results._
@@ -466,6 +484,23 @@ _The hand-coded analytic Helmholtz derivatives must match jax.grad._
 - test_residual_derivs_match_autodiff()  ·L47
 - test_ideal_derivs_match_autodiff()  ·L64
 - test_fast_tau_path_matches_full()  ·L78: The δ-precomputed Newton inner-loop path equals the full bundle.
+
+### tests/test_bulk_viscosity.py
+_Bulk viscosity ζ = ζ_vib + ζ_crit (0.5.0)._
+- const TABLE  ·L28
+- const IDS  ·L39
+- _parts(T, rho)  ·L42: (ζ_vib, ζ_crit, τ₁₁, ξ) at scalar (T, ρ) through the shipped kernels.
+- _rho(P, T)  ·L52
+- @pytest.mark.parametrize test_table_states(P, T, t11_ns, zvib, zcrit)  ·L59
+- @pytest.mark.parametrize test_public_entry_points_agree(P, T, t11_ns, zvib, zcrit)  ·L72
+- test_every_full_state_carries_bulk_viscosity()  ·L86
+- @pytest.mark.parametrize test_dilute_limit_against_cramer(T)  ·L98: 1 atm: τ₁₁ against Cramer's p·τ_v = 0.19152 (T/800 K)^−1.353 Pa·s.
+- test_zeta_crit_vanishes_where_xi_does()  ·L118
+- @pytest.mark.parametrize test_zero_frequency_holds_at_grid_top(P, T, t11_ns, zvib, zcrit)  ·L126: ω·τ₁₁ at 110 kHz (the N_x 2048 Nyquist on a 4 m loop) below 0.05.
+- test_mean_free_path_switch_is_smooth_and_faithful()  ·L132: The logistic switch tracks Lin & Trusler's hard switch at 896 kg/m³.
+- const GRAD_STATES  ·L148
+- @pytest.mark.parametrize test_jvp_and_grad_finite(T, rho)  ·L153
+- test_conductivity_gradient_finite_where_xi_is_zero()  ·L168: 0.5.0 fix: λ's gradient was NaN where the correlation length is zero.
 
 ### tests/test_density_from_PT_branch.py
 _density_from_PT below TC must land on the stable branch under the auto hint._
