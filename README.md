@@ -36,6 +36,20 @@ T_array = jnp.linspace(280, 340, 100)
 states = jax.vmap(lambda T: co2.state_from_PT(P=8e6, T=T))(T_array)
 ```
 
+## Two equations of state
+
+Every public function takes `eos=`: `"span_wagner"` (Span and Wagner 1996, the default)
+or `"nist2026"` (Lemmon, Harvey and Hellmann, NIST IR 8608, 2026: 24 terms with no
+nonanalytic terms, free of Span-Wagner's near-critical oscillations in c_p, κ_T and
+(∂c_v/∂T)_ρ). The name is static under `jax.jit`, so each backend compiles once.
+
+```python
+s = co2_eos.properties(314.0, 472.0, eos="nist2026")   # Widom crossing at 9.1 MPa
+```
+
+The transport correlations keep their parameters on either backend; their critical parts
+read the selected backend's thermodynamics.
+
 ## Try it without cloning
 
 [`examples/launch_demo.ipynb`](examples/launch_demo.ipynb) is the launch demo: validation against CoolProp, the `state_from_PT` CPU/GPU benchmarks, and a worked example of gradient-based optimisation through `state_from_PT`. (The v0.2 hot-path `(ρ, u)` benchmarks are in [`bench/PROFILING.md`](bench/PROFILING.md).) [Read it on GitHub](https://github.com/FluxTech-UG/co2-eos/blob/main/examples/launch_demo.ipynb) for a static render, or [open it on Colab](https://colab.research.google.com/github/FluxTech-UG/co2-eos/blob/main/examples/launch_demo.ipynb) and switch the runtime to T4 GPU to reproduce the comparison in about 15 minutes, most of that being the CPU baseline.

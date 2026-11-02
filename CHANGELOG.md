@@ -2,6 +2,45 @@
 
 All notable changes to co2-eos are documented here.
 
+## [0.6.0] - 2026-11-02
+
+A second equation-of-state backend: the NIST IR 8608 equation for CO₂
+(Lemmon, Harvey and Hellmann 2026, doi:10.6028/NIST.IR.8608), 24 Helmholtz
+terms with no nonanalytic terms, free of Span-Wagner's near-critical
+oscillations in c_p, κ_T and (∂c_v/∂T)_ρ.  Span-Wagner stays the default and
+returns the 0.5.0 results bit for bit.
+
+### Added
+
+- `eos=` keyword on every public function, `"span_wagner"` (default) or
+  `"nist2026"`, static under `jax.jit` (one compiled kernel per backend);
+  `EOS_NAMES`, `DEFAULT_EOS`, `SPAN_WAGNER`, `NIST2026` exported.
+- `co2_eos/nist2026_data.py` (Tables 1, 3, 4 and the Sec. 7 auxiliary
+  equations, cited by page) and `co2_eos/nist2026.py` (α, the analytic
+  derivative kernels under `helmholtz`'s names, the scalar property functions
+  under `span_wagner`'s); `co2_eos/backends.py`, the registry.
+- `co2_eos/data/{saturation_table,seed_table,chi_ref_cheb}_nist2026.npz`,
+  from the repo's scripts, each now taking `--eos`.
+- On `eos="nist2026"` the conductivity's critical enhancement and the bulk
+  viscosity's critical part read χ, c_p, c_v and the correlation length from
+  the NIST surface; the transport correlations keep their own parameters
+  (NIST IR 8608 Sec. 11).
+- Tests: the analytic derivatives against `jax.grad`, the report's printed
+  values (p_c, p_t, ω, ρ_c, the 273.15 K reference state; the report prints
+  no table of computed states), the auxiliary equations, the near-critical
+  regression (Figs. 25 and 26 reproduced), agreement with Span-Wagner and
+  CoolProp within twice Span-Wagner's stated uncertainties, the dome, and a
+  live bit-for-bit check of the Span-Wagner default against 0.5.0.
+
+### Changed
+
+- The (ρ, u) → T Newton count is per backend: 3 on Span-Wagner, 5 on
+  nist2026.
+- `scripts/generate_saturation_table.py` gives fsolve the exact Jacobian and
+  accepts on the residual; `scripts/generate_seed_table.py` also fills nodes
+  whose root lies inside the dome.  Span-Wagner's shipped tables are the
+  0.5.0 files.
+
 ## [0.5.0] - 2026-10-28
 
 New transport property: the bulk viscosity ζ(ρ, T). Existing keys, values and

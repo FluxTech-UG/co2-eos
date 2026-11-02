@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "co2-eos"
-version = "0.5.0"
+version = "0.6.0"
 description = "Differentiable CO₂ thermodynamic properties in JAX"
 readme = "README.md"
 license = "Apache-2.0"
@@ -14,7 +14,7 @@ requires-python = ">=3.10"
 authors = [
     { name = "John Patrick Therrien", email = "john@flux-tech.de" },
 ]
-keywords = ["CO2", "equation-of-state", "thermodynamics", "JAX", "autodiff", "Span-Wagner"]
+keywords = ["CO2", "equation-of-state", "thermodynamics", "JAX", "autodiff", "Span-Wagner", "NIST IR 8608"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",

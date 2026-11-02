@@ -1,7 +1,8 @@
 # co2-eos
 
-Differentiable CO₂ thermodynamic properties in JAX: a pure-JAX implementation of the
-Span-Wagner (1996) equation of state with hand-coded analytic α-derivatives. Every
+Differentiable CO₂ thermodynamic properties in JAX: pure-JAX Helmholtz equations of state
+(Span-Wagner 1996, the default, and NIST IR 8608 of 2026) with hand-coded analytic
+α-derivatives. Every
 property is JIT-compilable, `vmap`-vectorisable, and differentiable with `jax.grad`.
 This is a **package**: the simulation and modelling repos import it; it imports nothing
 back. Public and open-source (Apache-2.0).
@@ -18,6 +19,16 @@ current symbol-level inventory. The shape:
   and analytic α-derivatives), `helmholtz.py`, `core.py` (the fused (ρ, u)
   primitive-recovery kernel), `inversions.py`, `saturation.py`, `transport.py`, and the
   precomputed saturation/seed tables in `co2_eos/data/`.
+- **Two backends, one static switch.** Every public function takes `eos=`, a Python string
+  static under `jax.jit`: `"span_wagner"` (the default; `span_wagner.py` and `helmholtz.py`)
+  or `"nist2026"` (NIST IR 8608, Lemmon, Harvey and Hellmann 2026: `nist2026_data.py` holds
+  its constants, cited by page, `nist2026.py` its α, analytic kernels and property
+  functions). `backends.py` is the registry; `core`, `inversions`, `saturation` and the
+  EOS-coupled half of `transport` are built once per backend by a factory over the same
+  code, and the module-level names are the Span-Wagner instance. Each backend carries its
+  own R, M, ρ_c and tables (`<stem>_nist2026.npz`, from the scripts' `--eos`). The
+  Span-Wagner default is bit for bit 0.5.0 (`tests/test_sw_default_bit_for_bit.py`, live
+  against a `git archive` of 0.5.0); keep it so until a release says otherwise.
 - `tests/`: the validation suite; it is the package's contract (see Critical rules).
 - `bench/`: profiling and validation studies; `scripts/`: table generation;
   `examples/`: the launch demo.
