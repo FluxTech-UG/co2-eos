@@ -25,6 +25,10 @@ jobs:
             python-version: "3.12"
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Full history: test_sw_default_bit_for_bit.py archives the 0.5.0
+          # commit and skips on a shallow clone.
+          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6

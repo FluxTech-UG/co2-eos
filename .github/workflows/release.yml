@@ -48,6 +48,10 @@ jobs:
           grep -q "co2_eos/data/saturation_table.npz" /tmp/wheel_contents.txt
           grep -q "co2_eos/data/seed_table.npz" /tmp/wheel_contents.txt
           grep -q "co2_eos/data/chi_ref_cheb.npz" /tmp/wheel_contents.txt
+          # The nist2026 backend carries its own three tables (0.6.0).
+          grep -q "co2_eos/data/saturation_table_nist2026.npz" /tmp/wheel_contents.txt
+          grep -q "co2_eos/data/seed_table_nist2026.npz" /tmp/wheel_contents.txt
+          grep -q "co2_eos/data/chi_ref_cheb_nist2026.npz" /tmp/wheel_contents.txt
 
       - uses: actions/upload-artifact@v4
         with:
