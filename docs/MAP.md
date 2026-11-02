@@ -785,7 +785,7 @@ _The Span-Wagner default is bit for bit the 0.5.0 package._
 - const PROBE  ·L24
 - const REF_COMMIT  ·L25
 - _run_probe(root, out)  ·L28
-- test_sw_default_bit_for_bit(tmp_path)  ·L40
+- test_sw_default_bit_for_bit(tmp_path)  ·L44
 
 ## Other source files
 

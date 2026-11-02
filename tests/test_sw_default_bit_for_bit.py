@@ -27,8 +27,12 @@ REF_COMMIT = "f54b86b6092d254c593863a2321e7c5ab1af9983"   # 0.5.0 + docs/MAP.md
 
 def _run_probe(root, out):
     env = dict(os.environ, PYTHONPATH=str(root), JAX_ENABLE_X64="1")
-    r = subprocess.run([sys.executable, "-P", str(PROBE), str(out)], env=env,
-                       capture_output=True, text=True, timeout=900)
+    # -P (3.11+) keeps the probe's own directory off sys.path; on 3.10 the
+    # directory is tests/, which holds no co2_eos, and the loaded-from check
+    # below proves the import came from `root` either way.
+    safe_path = ["-P"] if sys.version_info >= (3, 11) else []
+    r = subprocess.run([sys.executable, *safe_path, str(PROBE), str(out)],
+                       env=env, capture_output=True, text=True, timeout=900)
     assert r.returncode == 0, r.stdout + r.stderr
     # Not vacuous: each run imported the package under its own root, not the
     # editable install's.
