@@ -1,14 +1,23 @@
-"""Generate CO2 saturation table from Span-Wagner EOS.
+"""Generate a CO2 saturation table from one of the package's EOS backends.
 
 Solves the Maxwell construction (equal P and equal Gibbs energy) at each
 subcritical temperature to find coexisting liquid and vapor densities.
-CoolProp provides initial guesses; final values are derived entirely from
-the Span-Wagner EOS in co2_eos/span_wagner.py.
+Initial guesses only: CoolProp for Span-Wagner, and for NIST IR 8608 the
+report's own auxiliary equations for the saturated densities (Eqs. 17 and 18,
+fitted to that surface; CoolProp's Span-Wagner guesses miss the NIST
+coexistence curve within 10 mK of T_c).  fsolve gets the exact Jacobian by
+jax.  Final values are derived entirely from the selected backend's surface
+(``co2_eos.backends``).
 
-Outputs co2_eos/data/saturation_table.npz with cubic spline coefficients
-for JIT-compilable interpolation in co2_eos/saturation.py. The .npz lives
-inside the package so it ships in the wheel.
+Outputs co2_eos/data/saturation_table<suffix>.npz (no suffix for Span-Wagner,
+``_nist2026`` for NIST IR 8608) with cubic spline coefficients for
+JIT-compilable interpolation in co2_eos/saturation.py. The .npz lives inside
+the package so it ships in the wheel.
+
+Run:  python scripts/generate_saturation_table.py [--eos nist2026]
 """
+
+import argparse
 
 import numpy as np
 from scipy.optimize import fsolve
@@ -21,17 +30,51 @@ import CoolProp.CoolProp as CP
 import jax
 jax.config.update("jax_enable_x64", True)
 
-from co2_eos.span_wagner import (
-    TC, RHOC, R, PC,
-    _scalar_pressure, _scalar_enthalpy, _scalar_entropy,
-)
+import jax.numpy as jnp
 
-# ── Constants ────────────────────────────────────────────────────────────
-T_TRIPLE = 216.592       # K, CO2 triple point temperature
-T_CRIT = TC              # 304.1282 K
-T_NEAR_CRIT = T_CRIT - 0.001  # stop table 1 mK below Tc
+from co2_eos import backends
+from co2_eos import nist2026_data
 
-DATA_DIR = Path(__file__).parent.parent / "co2_eos" / "data"
+# ── The backend's surface, bound by _configure(eos) ──────────────────────
+TC = RHOC = R = PC = T_TRIPLE = T_CRIT = T_NEAR_CRIT = None
+_scalar_pressure = _scalar_enthalpy = _scalar_entropy = None
+_residual = _jacobian = None
+OUT_PATH = None
+EOS = None
+
+
+def _configure(eos):
+    """Bind the module's constants and property functions to backend eos."""
+    global TC, RHOC, R, PC, T_TRIPLE, T_CRIT, T_NEAR_CRIT, OUT_PATH
+    global _scalar_pressure, _scalar_enthalpy, _scalar_entropy
+    global _residual, _jacobian, EOS
+    EOS = eos
+    sw = backends.get(eos).surface
+    TC, RHOC, R, PC, T_TRIPLE = sw.TC, sw.RHOC, sw.R, sw.PC, sw.T_TRIPLE
+    T_CRIT = TC
+    T_NEAR_CRIT = T_CRIT - 0.001  # stop table 1 mK below Tc
+    _scalar_pressure = jax.jit(sw._scalar_pressure)
+    _scalar_enthalpy = jax.jit(sw._scalar_enthalpy)
+    _scalar_entropy = jax.jit(sw._scalar_entropy)
+    OUT_PATH = backends.table_path(eos, "saturation_table")
+
+    def residual(log_rhos, T):
+        rl, rv = jnp.exp(log_rhos[0]), jnp.exp(log_rhos[1])
+        g = lambda r: sw._scalar_enthalpy(T, r) - T * sw._scalar_entropy(T, r)
+        return jnp.stack([
+            (sw._scalar_pressure(T, rl) - sw._scalar_pressure(T, rv)) / PC,
+            (g(rl) - g(rv)) / (R * T)])
+    _residual = jax.jit(residual)
+    _jacobian = jax.jit(jax.jacfwd(residual))
+
+
+def _aux_nist2026(T):
+    """NIST IR 8608 Eqs. 17 and 18: saturated (ρ_L, ρ_V) [kg/m³] at T."""
+    d = nist2026_data
+    x = 1.0 - T / TC
+    rho_l = RHOC * np.exp(np.sum(d.AUX_RHOL_A * x ** d.AUX_RHOL_T))
+    rho_v = RHOC * np.exp(np.sum(d.AUX_RHOV_A * x ** d.AUX_RHOV_T))
+    return rho_l, rho_v
 
 
 def gibbs(T, rho):
@@ -49,17 +92,12 @@ def maxwell_residual(log_rhos, T):
         f1 = (P_l - P_v) / P_c  (equal pressure)
         f2 = (g_l - g_v) / (R*T) (equal Gibbs energy)
     """
-    rho_l = np.exp(log_rhos[0])
-    rho_v = np.exp(log_rhos[1])
+    return np.asarray(_residual(np.asarray(log_rhos), T))
 
-    P_l = float(_scalar_pressure(T, rho_l))
-    P_v = float(_scalar_pressure(T, rho_v))
-    g_l = gibbs(T, rho_l)
-    g_v = gibbs(T, rho_v)
 
-    f1 = (P_l - P_v) / PC
-    f2 = (g_l - g_v) / (R * T)
-    return [f1, f2]
+def maxwell_jacobian(log_rhos, T):
+    """Exact Jacobian of maxwell_residual (jax.jacfwd)."""
+    return np.asarray(_jacobian(np.asarray(log_rhos), T))
 
 
 def build_temperature_grid(n_bulk=300, n_near=300, n_vnear=200):
@@ -93,10 +131,13 @@ def solve_saturation_curve(T_grid):
     s_v = np.zeros(N)
 
     for i, T in enumerate(T_grid):
-        # CoolProp initial guess
+        # Initial guess: the backend's auxiliary equations, else CoolProp
         try:
-            rho_l_guess = CP.PropsSI('D', 'T', float(T), 'Q', 0, 'CO2')
-            rho_v_guess = CP.PropsSI('D', 'T', float(T), 'Q', 1, 'CO2')
+            if EOS == backends.NIST2026:
+                rho_l_guess, rho_v_guess = _aux_nist2026(float(T))
+            else:
+                rho_l_guess = CP.PropsSI('D', 'T', float(T), 'Q', 0, 'CO2')
+                rho_v_guess = CP.PropsSI('D', 'T', float(T), 'Q', 1, 'CO2')
         except Exception:
             # Very near critical: use previous solution with mild extrapolation
             if i > 0:
@@ -108,13 +149,17 @@ def solve_saturation_curve(T_grid):
         x0 = [np.log(rho_l_guess), np.log(rho_v_guess)]
 
         sol, info, ier, msg = fsolve(
-            maxwell_residual, x0, args=(T,), full_output=True,
-            xtol=1e-12,
+            maxwell_residual, x0, args=(T,), fprime=maxwell_jacobian,
+            full_output=True, xtol=1e-12,
         )
 
-        if ier != 1:
-            print(f"  WARNING: fsolve did not converge at T={T:.6f} K: {msg}")
-            # Fall back to CoolProp guess (still use SW pressure for consistency)
+        # Accept on the residual: near T_c fsolve can stall at round-off
+        # (ier 5, "not making good progress") on a converged root.
+        res = float(np.max(np.abs(info["fvec"])))
+        if ier != 1 and res > 1e-13:
+            print(f"  WARNING: fsolve did not converge at T={T:.6f} K "
+                  f"(max residual {res:.1e}): {msg}")
+            # Fall back to the guess (still the backend's pressure for consistency)
             sol = x0
 
         rl = np.exp(sol[0])
@@ -162,8 +207,8 @@ def fit_and_save(T_grid, P_sat, rho_l, rho_v, h_l, h_v, s_l, s_v):
         cs = CubicSpline(P_sat, values)
         arrays[f'{name}_c'] = cs.c
 
-    DATA_DIR.mkdir(exist_ok=True)
-    out_path = DATA_DIR / "saturation_table.npz"
+    out_path = OUT_PATH
+    out_path.parent.mkdir(exist_ok=True)
     np.savez(out_path, **arrays)
     print(f"\nSaved saturation table to {out_path}")
     print(f"  T range: [{T_grid[0]:.3f}, {T_grid[-1]:.6f}] K")
@@ -172,7 +217,12 @@ def fit_and_save(T_grid, P_sat, rho_l, rho_v, h_l, h_v, s_l, s_v):
 
 
 def main():
-    print("Generating CO2 saturation table from Span-Wagner EOS...")
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--eos", default=backends.DEFAULT_EOS,
+                    choices=backends.EOS_NAMES)
+    eos = ap.parse_args().eos
+    _configure(eos)
+    print(f"Generating CO2 saturation table from the {eos} EOS...")
     t0 = time.time()
 
     T_grid = build_temperature_grid()

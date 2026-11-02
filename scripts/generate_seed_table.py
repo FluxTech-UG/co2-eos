@@ -19,9 +19,12 @@ subcritical liquid/vapor points the test suite exercises:
 
     ρ ∈ [60, 1050] kg/m³ ,  T ∈ [255, 345] K  (u-grid spans this box)
 
-Run:  python scripts/generate_seed_table.py
-Writes co2_eos/data/seed_table.npz
+Run:  python scripts/generate_seed_table.py [--eos nist2026]
+Writes co2_eos/data/seed_table<suffix>.npz (``_nist2026`` for NIST IR 8608;
+it reads that backend's saturation table, so generate that one first).
 """
+
+import argparse
 
 import numpy as np
 from pathlib import Path
@@ -31,15 +34,18 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-from co2_eos import core
-from co2_eos import saturation as sat
-from co2_eos.span_wagner import T_TRIPLE, TC
+from co2_eos import backends
+from co2_eos import core as _core_mod
+from co2_eos import saturation as _sat_mod
+
+# Bound to the selected backend by main().
+core = sat = None
+TC = None
 
 RHO_LO, RHO_HI, NRHO = 60.0, 1050.0, 256
 T_LO, T_HI = 255.0, 345.0
 NU = 512
 
-OUT = Path(__file__).resolve().parents[1] / "co2_eos" / "data" / "seed_table.npz"
 
 
 def _u_cv(T, rho):
@@ -65,6 +71,15 @@ def _solve_T(rho, u):
 
 
 def main():
+    global core, sat, TC
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--eos", default=backends.DEFAULT_EOS,
+                    choices=backends.EOS_NAMES)
+    eos = ap.parse_args().eos
+    core = _core_mod.for_eos(eos)
+    sat = _sat_mod.for_eos(eos)
+    TC = backends.get(eos).surface.TC
+    OUT = backends.table_path(eos, "seed_table")
     rho_grid = np.linspace(RHO_LO, RHO_HI, NRHO)
 
     # u-grid bounds from single-phase states only.  Inside the two-phase dome
@@ -94,8 +109,22 @@ def main():
     # by 1-D interpolation along the u-axis; the dome is a u-interval at
     # fixed rho, so the fill is smooth, and those nodes never seed a real
     # single-phase query (the seed is a convergence accelerator only).
+    # A node whose root lies inside the dome (T < T_c, ρ_v(T) < ρ < ρ_l(T))
+    # is filled too, even with C_v > 0 there: the single-phase surface's
+    # metastable extension inside the dome is no seed for a single-phase
+    # query.  On NIST IR 8608 it carries steep structure from the narrow
+    # Gaussian terms 22 to 24 (C_v from about -1.8e4 to +1.6e4 J/(kg·K) at
+    # 303.0 to 303.7 K near ρ_c), and a bilinear cell straddling the dome
+    # edge seeded Newton into it (80 K errors at T_c + 8 mK).  Span-Wagner's
+    # shipped seed_table.npz predates this mask (0.5.0, kept so its results
+    # stay bit for bit).
+    T0_flat = np.asarray(T0).ravel()
+    rl_T0, rv_T0 = sat.saturation_densities(
+        jnp.asarray(np.clip(T0_flat, None, TC - 1e-3)))
+    in_dome = ((T0_flat < TC) & (RR.ravel() > np.asarray(rv_T0))
+               & (RR.ravel() < np.asarray(rl_T0)))
     bad = ((np.abs(np.array(resid)) > 1.0) | (np.array(cv) <= 0.0)
-           ).reshape(NRHO, NU)
+           | in_dome.reshape(np.shape(resid))).reshape(NRHO, NU)
     print(f"  dome/unconverged nodes filled: {bad.sum()} of {bad.size}")
     for i in range(NRHO):
         b = bad[i]

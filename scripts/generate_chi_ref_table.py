@@ -12,11 +12,11 @@ path; a degree-100 Chebyshev fit reproduces f to 3e-13 max relative error over
 δ ∈ [0, 2.75] (ρ up to ~1286 kg/m³, beyond the inversion bisection bound) and
 evaluates in ~100 fma by Clenshaw recurrence.
 
-Run:  python scripts/generate_chi_ref_table.py
-Writes co2_eos/data/chi_ref_cheb.npz
+Run:  python scripts/generate_chi_ref_table.py [--eos nist2026]
+Writes co2_eos/data/chi_ref_cheb<suffix>.npz (``_nist2026`` for NIST IR 8608).
 """
 
-from pathlib import Path
+import argparse
 
 import numpy as np
 import jax
@@ -24,23 +24,25 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-from co2_eos import span_wagner as sw
-from co2_eos import helmholtz as hz
+from co2_eos import backends
 
 T_REF = 456.19            # K, Huber et al. (2016); must match transport._T_REF
 DELTA_LO, DELTA_HI = 0.0, 2.75
 DEGREE = 100
 
-OUT = Path(__file__).resolve().parents[1] / "co2_eos" / "data" / "chi_ref_cheb.npz"
-
-
-def f_exact(delta):
-    tau_ref = sw.TC / T_REF
-    _, ar_d, _, ar_dd, _, _ = hz.residual_derivs(tau_ref, delta)
-    return 1.0 + 2.0 * delta * ar_d + delta * delta * ar_dd
-
-
 def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--eos", default=backends.DEFAULT_EOS,
+                    choices=backends.EOS_NAMES)
+    eos = ap.parse_args().eos
+    b = backends.get(eos)
+    OUT = backends.table_path(eos, "chi_ref_cheb")
+
+    def f_exact(delta):
+        tau_ref = b.surface.TC / T_REF
+        _, ar_d, _, ar_dd, _, _ = b.kernel.residual_derivs(tau_ref, delta)
+        return 1.0 + 2.0 * delta * ar_d + delta * delta * ar_dd
+
     k = np.arange(DEGREE + 1)
     x = np.cos(np.pi * (k + 0.5) / (DEGREE + 1))          # Chebyshev nodes
     d = 0.5 * (x + 1.0) * (DELTA_HI - DELTA_LO) + DELTA_LO
