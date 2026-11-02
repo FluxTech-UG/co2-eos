@@ -164,38 +164,44 @@ _Validation harness: the fast (ρ, u) path vs an independent reference chain._
 
 ### co2_eos/__init__.py
 _CO2-EOS: Differentiable CO₂ thermodynamic properties in JAX._
-- const LIQUID  ·L68
-- const VAPOR  ·L69
-- const SUPERCRITICAL  ·L70
-- const AUTO  ·L71
-- @jax.jit viscosity(T, rho)  ·L94: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
-- @jax.jit thermal_conductivity(T, rho)  ·L102: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
-- @jax.jit bulk_viscosity(T, rho)  ·L110: Bulk viscosity ζ [Pa·s] at scalar (T, ρ). vmap for batches.
-- @jax.jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)  ·L128: Full thermodynamic + transport state from (ρ, u). Batched.
-- @jax.jit properties_from_rho_T(rho, T)  ·L157: Full thermodynamic + transport state from (ρ, T). Batched.
-- @jax.jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL)  ·L184: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
-- @jax.jit properties(T, rho)  ·L202: Full thermodynamic + transport state at scalar (T, ρ).
-- @jax.jit state_from_PT(P, T, phase_hint=AUTO)  ·L213: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
-- @jax.jit density_from_PT(P, T, phase_hint=AUTO)  ·L228: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
-- @jax.jit state_from_Ph(P, h, phase_hint=AUTO)  ·L237: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
-- @jax.jit state_from_Du(rho, u, phase_hint=AUTO)  ·L253: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
+- const LIQUID  ·L84
+- const VAPOR  ·L85
+- const SUPERCRITICAL  ·L86
+- const AUTO  ·L87
+- @_jit viscosity(T, rho, eos=DEFAULT_EOS)  ·L114: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
+- @_jit thermal_conductivity(T, rho, eos=DEFAULT_EOS)  ·L126: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
+- @_jit bulk_viscosity(T, rho, eos=DEFAULT_EOS)  ·L134: Bulk viscosity ζ [Pa·s] at scalar (T, ρ). vmap for batches.
+- @_jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L152: Full thermodynamic + transport state from (ρ, u). Batched.
+- @_jit properties_from_rho_T(rho, T, eos=DEFAULT_EOS)  ·L182: Full thermodynamic + transport state from (ρ, T). Batched.
+- @_jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L211: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
+- @_jit properties(T, rho, eos=DEFAULT_EOS)  ·L231: Full thermodynamic + transport state at scalar (T, ρ).
+- @_jit state_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L242: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
+- @_jit density_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L257: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
+- @_jit state_from_Ph(P, h, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L266: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
+- @_jit state_from_Du(rho, u, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L282: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
+
+### co2_eos/backends.py
+_The equation-of-state backends and the static switch that selects one._
+- const SPAN_WAGNER  ·L30
+- const NIST2026  ·L31
+- const EOS_NAMES  ·L32
+- const DEFAULT_EOS  ·L33
+- const DATA_DIR  ·L35
+- const _BACKENDS  ·L37
+- get(eos)  ·L45: The backend record for ``eos``; raises on an unknown name.
+- table_path(eos, stem)  ·L54: Path of the backend's table ``<stem><suffix>.npz`` in ``co2_eos/data``.
 
 ### co2_eos/core.py
 _Redesigned high-performance EOS core: analytic derivatives, fused passes._
-- const _NEWTON_ITERS_TABLE  ·L48
-- const _NEWTON_ITERS_AFFINE  ·L49
-- const _T_MIN  ·L50
-- const _T_MAX  ·L51
-- const _SEED_PATH  ·L62
-- const _HAVE_SEED  ·L66
-- _seed_T(rho, u)  ·L91: Initial T guess for the (ρ, u) inversion via the bilinear table.
-- _thermo(T, rho)  ·L122: All ten Helmholtz-derived properties at scalar (T, ρ).
-- _u_and_cv(T, rho)  ·L159: Internal energy u [J/kg] and Cv [J/(kg·K)] at scalar (T, ρ).
-- _solve_T(rho, u)  ·L178: Fixed-iteration Newton solve for T given (ρ, u). Scalar.
-- @jax.custom_jvp _temperature_from_Du(rho, u, phase_hint)  ·L204: T such that u(T, ρ) = u_target at fixed ρ. Scalar. (phase_hint unused.)
-- @_temperature_from_Du.defjvp _temperature_from_Du_jvp(primals, tangents)  ·L210: dT = (du − (∂u/∂ρ)·dρ) / Cv, with Cv and ∂u/∂ρ analytic.
-- _state_from_T_rho(T, rho)  ·L236: Scalar fused state at (T, ρ): every thermo + transport property.
-- _state_from_rho_u(rho, u, phase_hint)  ·L283: Scalar fused state from (ρ, u): solve T once, derive everything.
+- const _NEWTON_ITERS_TABLE  ·L54
+- const _NEWTON_ITERS_AFFINE  ·L55
+- const _T_MAX  ·L56
+- _build(eos)  ·L61: The fused kernels on backend ``eos``; returns them as a namespace.
+- const _BUILT  ·L325
+- for_eos(eos)  ·L328: The kernels of backend ``eos`` (built once, at first request).
+- const _SW  ·L339
+- const _HAVE_SEED  ·L340
+- const _T_MIN  ·L341
 
 ### co2_eos/helmholtz.py
 _Span-Wagner (1996) reduced Helmholtz energy with hand-coded analytic_
@@ -237,61 +243,125 @@ _Span-Wagner (1996) reduced Helmholtz energy with hand-coded analytic_
 
 ### co2_eos/inversions.py
 _Thermodynamic inversions: pure JAX, JIT-compilable, vmappable,_
-- const LIQUID  ·L35
-- const VAPOR  ·L36
-- const SUPERCRITICAL  ·L37
-- const MAX_ITER  ·L40
-- const TOL  ·L41
-- _subcritical_branch(T, P)  ·L57: Which stable branch a (T, P) state below TC lies on, and its bracket.
-- _initial_guess(T, P, phase_hint)  ·L74: Return an initial density guess based on phase_hint.
-- _safe_denom(x, eps=1e-30)  ·L115: Guard a denominator: preserve sign for small values, fall back to +eps for NaN.
-- _halley_body(state)  ·L125: One Halley step (Householder order 2) for cubic convergence.
-- _halley_cond(state)  ·L149: Continue while not converged and under max iterations.
-- const _BISECT_LO  ·L157
-- const _BISECT_HI  ·L158
-- const _BISECT_ITERS  ·L159
-- const _BRANCH_TOL  ·L160
-- _bisection_body(state)  ·L163: One bisection step on f(ρ) = P(T,ρ) − P_target.
-- _bisection_cond(state)  ·L181
-- _bisection_bracket(T, P, phase_hint)  ·L186: Density bracket [lo, hi] on which P(T, ρ) is monotone for this state.
-- _bisection_solve(T, P, lo=_BISECT_LO, hi=_BISECT_HI)  ·L209: Bisection solve for ρ given (T, P) on [lo, hi]. Scalar inputs.
-- _on_requested_branch(T, P, rho, phase_hint)  ·L218: Under the auto hint below TC, is the converged root on the stable branch?
-- _solve_density(T, P, phase_hint)  ·L235: Halley solve for ρ given (T, P, phase_hint), with bisection fallback. Scalar inputs.
-- @jax.custom_jvp _density_from_PT(T, P, phase_hint)  ·L266: Find ρ such that P(T,ρ) = P_target. Scalar inputs.
-- @_density_from_PT.defjvp _density_from_PT_jvp(primals, tangents)  ·L281: JVP via implicit function theorem.
-- @jax.jit density_from_PT(T, P, phase_hint)  ·L303: Find ρ [kg/m³] such that P(T,ρ) = P_target.
-- _initial_guess_Ph(P, h, phase_hint)  ·L328: Estimate (T, ρ) from (P, h) for the 2D Newton solver.
-- _newton_body_2d(state)  ·L397: One 2D Newton step on F = [P(T,ρ) - P_target, h(T,ρ) - h_target].
-- _newton_cond_2d(state)  ·L437: Continue while not converged and under max iterations.
-- _solve_state_Ph(P, h, phase_hint)  ·L443: 2D Newton solve for (T, ρ) given (P, h, phase_hint). Scalar inputs.
-- @jax.custom_jvp _state_from_Ph(P, h, phase_hint)  ·L456: Find (T, ρ) such that P(T,ρ) = P and h(T,ρ) = h. Scalar inputs.
-- @_state_from_Ph.defjvp _state_from_Ph_jvp(primals, tangents)  ·L498: JVP via implicit function theorem on F(T,ρ; P,h) = 0.
-- @jax.jit state_from_Ph(P, h, phase_hint)  ·L560: Find (T [K], ρ [kg/m³]) such that P(T,ρ) = P and h(T,ρ) = h.
-- _initial_guess_Du(rho, u)  ·L585: Estimate T from (ρ, u) using u ≈ Cv_approx * R * T.
-- _newton_body_Du(state)  ·L596: One Newton step: T_{n+1} = T_n - f(T)/f'(T) where f = u(T,ρ) - u_target.
-- _newton_cond_Du(state)  ·L611: Continue while not converged and under max iterations.
-- _solve_temperature_Du(rho, u, phase_hint)  ·L617: Newton solve for T given (ρ, u, phase_hint). Scalar inputs.
-- @jax.custom_jvp _temperature_from_Du(rho, u, phase_hint)  ·L629: Find T such that u(T, ρ) = u_target at fixed ρ. Scalar inputs.
-- @_temperature_from_Du.defjvp _temperature_from_Du_jvp(primals, tangents)  ·L644: JVP via implicit function theorem.
-- @jax.jit temperature_from_Du(rho, u, phase_hint)  ·L666: Find T [K] such that u(T, ρ) = u_target at fixed ρ.
-- @jax.custom_jvp _state_from_Du(rho, u, phase_hint)  ·L688: Find (T, P, h) given (ρ, u). Scalar inputs.
-- @_state_from_Du.defjvp _state_from_Du_jvp(primals, tangents)  ·L708: JVP via implicit differentiation + chain rule.
-- @jax.jit state_from_Du(rho, u, phase_hint)  ·L736: Find (T [K], P [Pa], h [J/kg]) given (ρ, u) at fixed density.
+- const LIQUID  ·L26
+- const VAPOR  ·L27
+- const SUPERCRITICAL  ·L28
+- const MAX_ITER  ·L31
+- const TOL  ·L32
+- _build(eos)  ·L35: The inversions on backend ``eos``, returned as a namespace.
+- const _BUILT  ·L791
+- for_eos(eos)  ·L794: The inversions of backend ``eos``.
+- const _SW  ·L799
+- const _BISECT_HI  ·L834
+- const _BISECT_ITERS  ·L835
+- const _BISECT_LO  ·L836
+- const _BRANCH_TOL  ·L837
+
+### co2_eos/nist2026.py
+_NIST IR 8608 (2026) equation of state for CO₂: pure JAX, analytic derivatives._
+- const NAME  ·L45
+- const TC  ·L48
+- const RHOC_MOLAR  ·L49
+- const M  ·L50
+- const RHOC  ·L51
+- const R_MOLAR  ·L52
+- const R  ·L53
+- const PC  ·L54
+- const T_TRIPLE  ·L55
+- const _I_LOGTAU  ·L58
+- const _I_N  ·L59
+- const _I_THETA  ·L60
+- const _I_N6  ·L61
+- const _I_N7  ·L62
+- const _NT  ·L65
+- const _N  ·L66
+- const _T  ·L67
+- const _D  ·L68
+- const _L  ·L69
+- const _R  ·L70
+- const _ETA  ·L71
+- const _BETA  ·L72
+- const _GAMMA  ·L73
+- const _EPS  ·L74
+- const _RL  ·L82
+- const _RLL1  ·L83
+- const _ETA2  ·L84
+- const _BETA2  ·L85
+- const _TT1  ·L86
+- alpha0(tau, delta)  ·L93: Ideal-gas reduced Helmholtz energy α°(τ, δ), Eq. (5).
+- alphar(tau, delta)  ·L99: Residual reduced Helmholtz energy αʳ(τ, δ), Eq. (6), as three sums.
+- alpha(tau, delta)  ·L113: Total reduced Helmholtz energy α(τ, δ) = α° + αʳ.
+- ideal_derivs(tau, delta)  ·L122: Return (α°, α°_τ, α°_ττ) at scalar (τ, δ).
+- ideal_tau_only(tau)  ·L134: Return (α°_τ, α°_ττ), independent of δ.
+- _delta_side(delta)  ·L144: Per-term δ factors: (δ-coefficient n δ^d exp(−r δ^l − η(δ−ε)²), D1, D1').
+- _tau_side(tau)  ·L156: Per-term τ factors: (τ^t exp(−β(τ−γ)²), T1, T1').
+- residual_derivs(tau, delta)  ·L166: Return (αʳ, αʳ_δ, αʳ_τ, αʳ_δδ, αʳ_ττ, αʳ_δτ) at scalar (τ, δ).
+- residual_tau_prep(delta)  ·L186: The δ-invariant state of the τ-derivative inner loop at fixed ρ.
+- residual_tau_fast(tau, dstate)  ·L192: Return (αʳ_τ, αʳ_ττ) from the precomputed δ-state ``dstate``.
+- residual_tau_derivs(tau, delta)  ·L199: Return (αʳ_τ, αʳ_ττ) at scalar (τ, δ).
+- _scalar_pressure(T, rho)  ·L208: Pressure [Pa] at scalar (T, ρ).
+- _scalar_cv(T, rho)  ·L214: Isochoric heat capacity c_v [J/(kg·K)] at scalar (T, ρ).
+- _bracket_terms(T, rho)  ·L222
+- _scalar_cp(T, rho)  ·L233: Isobaric heat capacity c_p [J/(kg·K)] at scalar (T, ρ).
+- _scalar_speed_of_sound(T, rho)  ·L239: Speed of sound [m/s] at scalar (T, ρ).
+- _scalar_enthalpy(T, rho)  ·L246: Specific enthalpy h [J/kg] at scalar (T, ρ).
+- _scalar_internal_energy(T, rho)  ·L255: Specific internal energy u [J/kg] at scalar (T, ρ).
+- _scalar_entropy(T, rho)  ·L263: Specific entropy s [J/(kg·K)] at scalar (T, ρ).
+- _scalar_gibbs_energy(T, rho)  ·L272: Specific Gibbs energy g = h − T s [J/kg] at scalar (T, ρ).
+
+### co2_eos/nist2026_data.py
+_Constants of the NIST IR 8608 equation of state for CO₂: the single source._
+- const R_MOLAR  ·L24
+- const M  ·L25
+- const TC  ·L26
+- const RHOC_MOLAR  ·L27
+- const T_TRIPLE  ·L28
+- const PC_TABLE  ·L31
+- const P_TRIPLE_TABLE  ·L32
+- const ACENTRIC_TABLE  ·L33
+- const RHOC_MASS_TEXT  ·L37
+- const REF_T  ·L41
+- const REF_H_LIQ  ·L42
+- const REF_S_LIQ  ·L43
+- const IDEAL_N0  ·L50
+- const IDEAL_N  ·L51
+- const IDEAL_M  ·L52
+- const IDEAL_N6  ·L53
+- const IDEAL_N7  ·L54
+- const RES_N  ·L65
+- const RES_T  ·L92
+- const RES_D  ·L99
+- const EXP_L  ·L107
+- const EXP_R  ·L108
+- const GBS_ETA  ·L111
+- const GBS_BETA  ·L113
+- const GBS_GAMMA  ·L115
+- const GBS_EPS  ·L117
+- const AUX_PS_A  ·L129
+- const AUX_PS_T  ·L130
+- const AUX_PS_TOL  ·L131
+- const AUX_RHOL_A  ·L132
+- const AUX_RHOL_T  ·L133
+- const AUX_RHOV_A  ·L134
+- const AUX_RHOV_T  ·L135
+- const AUX_RHO_TOL  ·L136
 
 ### co2_eos/saturation.py
 _CO2 saturation curve lookups: pure JAX, JIT-compilable._
-- const _TABLE_PATH  ·L22
-- const _TABLE  ·L28
-- _ensure_loaded()  ·L31: Load saturation table on first use. Must be called outside JIT.
-- _eval_spline(x, breaks, coeffs)  ·L42: Evaluate cubic spline at x.
-- saturation_pressure(T)  ·L66: Saturation pressure P_sat [Pa] at temperature T [K].
-- saturation_densities(T)  ·L76: Saturated liquid and vapor densities [kg/m3] at temperature T [K].
-- saturation_enthalpies_T(T)  ·L88: Saturated liquid and vapor enthalpies [J/kg] at temperature T [K].
-- saturation_entropies(T)  ·L100: Saturated liquid and vapor entropies [J/(kg*K)] at temperature T [K].
-- saturation_temperature(P)  ·L114: Saturation temperature T_sat [K] at pressure P [Pa].
-- saturation_enthalpies(P)  ·L123: Saturated liquid and vapor enthalpies [J/kg] at pressure P [Pa].
-- saturation_densities_P(P)  ·L135: Saturated liquid and vapor densities [kg/m3] at pressure P [Pa].
-- saturation_entropies_P(P)  ·L147: Saturated liquid and vapor entropies [J/(kg*K)] at pressure P [Pa].
+- const _TABLES  ·L33
+- _ensure_loaded(eos=DEFAULT_EOS)  ·L36: Load the backend's saturation table on first use. Call outside JIT.
+- _table(eos)  ·L44
+- _eval_spline(x, breaks, coeffs)  ·L51: Evaluate cubic spline at x.
+- saturation_pressure(T, eos=DEFAULT_EOS)  ·L75: Saturation pressure P_sat [Pa] at temperature T [K].
+- saturation_densities(T, eos=DEFAULT_EOS)  ·L85: Saturated liquid and vapor densities [kg/m3] at temperature T [K].
+- saturation_enthalpies_T(T, eos=DEFAULT_EOS)  ·L97: Saturated liquid and vapor enthalpies [J/kg] at temperature T [K].
+- saturation_entropies(T, eos=DEFAULT_EOS)  ·L109: Saturated liquid and vapor entropies [J/(kg*K)] at temperature T [K].
+- saturation_temperature(P, eos=DEFAULT_EOS)  ·L123: Saturation temperature T_sat [K] at pressure P [Pa].
+- saturation_enthalpies(P, eos=DEFAULT_EOS)  ·L132: Saturated liquid and vapor enthalpies [J/kg] at pressure P [Pa].
+- saturation_densities_P(P, eos=DEFAULT_EOS)  ·L144: Saturated liquid and vapor densities [kg/m3] at pressure P [Pa].
+- saturation_entropies_P(P, eos=DEFAULT_EOS)  ·L156: Saturated liquid and vapor entropies [J/(kg*K)] at pressure P [Pa].
+- const _LOOKUPS  ·L168
+- for_eos(eos)  ·L174: The lookups bound to backend ``eos``, under their module names.
 
 ### co2_eos/span_wagner.py
 _Span-Wagner (1996) equation of state for CO₂: pure JAX implementation._
@@ -358,68 +428,61 @@ _Span-Wagner (1996) equation of state for CO₂: pure JAX implementation._
 
 ### co2_eos/transport.py
 _CO₂ transport property correlations: pure JAX implementation._
-- const TC  ·L23
-- const RHOC_MOLAR  ·L24
-- const M  ·L25
-- const R_MOLAR  ·L26
-- const PC  ·L27
-- const RHOC_MASS  ·L28
-- const _ETA0_A  ·L45
-- _eta_dilute(T)  ·L56: Dilute-gas viscosity η₀(T) [Pa·s].
-- const _EPSILON_OVER_K  ·L74
-- const _SIGMA  ·L75
-- const _NA  ·L76
-- const _RF_B  ·L78
-- const _RF_T  ·L82
-- _eta_initial(T, rho_molar, eta0)  ·L85: Initial-density viscosity contribution [Pa·s].
-- const _TT  ·L108
-- const _RHO_TL  ·L109
-- const _C1  ·L110
-- const _C2  ·L111
-- const _GAMMA_VISC  ·L112
-- const _ETA_TL  ·L115
-- _eta_residual(T, rho_mass)  ·L120: Higher-order viscosity contribution [Pa·s].
-- _scalar_viscosity(T, rho)  ·L131: Dynamic viscosity μ [Pa·s] at scalar (T, ρ [kg/m³]).
-- const _LAM0_L  ·L145
-- _lambda_dilute(T)  ·L148: Dilute-gas thermal conductivity λ₀(T) [W/(m·K)].
-- const _LAM_RES_B  ·L158
-- const _LAM_RES_D  ·L162
-- const _LAM_RES_T  ·L163
-- const _RHOMASS_REDUCING  ·L165
-- _lambda_residual(T, rho)  ·L168: Residual thermal conductivity [W/(m·K)].
-- const _KB  ·L185
-- const _R0  ·L186
-- const _GAMMA_CE  ·L187
-- const _GAMMA_EXP  ·L188
-- const _NU  ·L189
-- const _XI0  ·L190
-- const _QD  ·L191
-- const _T_REF  ·L192
-- const _CHI_PATH  ·L200
-- const _HAVE_CHI_CHEB  ·L201
-- _dpdrho_ref_reduced(delta)  ·L216: 1 + 2δ·αʳ_δ + δ²·αʳ_δδ at T_ref: Chebyshev-Clenshaw (or exact fallback).
-- @jax.custom_jvp _xi_of_excess(diff)  ·L236: ξ = ξ₀ (max(Δχ̃, 0)/Γ)^(ν/γ) [m], zero where Δχ̃ ≤ 0.
-- @_xi_of_excess.defjvp _xi_of_excess_jvp(primals, tangents)  ·L249
-- _correlation_length_and_excess(T, rho, alr_d, alr_dd)  ·L259: Olchowy-Sengers correlation length ξ [m] and the susceptibility excess.
-- _lambda_critical_formula(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt, guarded)  ·L286: The enhancement's formula; ``guarded`` (static) is its derivative form.
-- @jax.custom_jvp _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt)  ·L336: Critical enhancement of thermal conductivity [W/(m·K)].
-- @_lambda_critical_shared.defjvp _lambda_critical_shared_jvp(primals, tangents)  ·L352: The value from the plain formula, the tangent from the guarded one.
-- _thermal_conductivity_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt)  ·L362: λ [W/(m·K)] reusing reduced derivatives already computed at (T, ρ).
-- _scalar_thermal_conductivity(T, rho)  ·L376: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ [kg/m³]).
-- const _P11_A  ·L396
-- const _P11_T  ·L397
-- const _SIGMA_HS  ·L398
-- const _A_MFP  ·L399
-- const _RHO_MFP_SWITCH  ·L400
-- const _RHO_MFP_WIDTH  ·L401
-- const _R_B  ·L404
-- _vibrational_relaxation_time(T, rho)  ·L407: Isothermal vibrational relaxation time τ₁₁ [s] at scalar (T, ρ).
-- _bulk_viscosity_parts(T, rho, mu, w, cp, cv, al0_tt, xi)  ·L431: (ζ_vib, ζ_crit, τ₁₁) at scalar (T, ρ) from quantities already at hand.
-- _bulk_viscosity_shared(T, rho, mu, w, cp, cv, al0_tt, xi)  ·L458: ζ [Pa·s] reusing quantities the fused (T, ρ) path already computed.
-- _scalar_bulk_viscosity(T, rho)  ·L465: Bulk viscosity ζ [Pa·s] at scalar (T, ρ [kg/m³]).
-- @jax.jit viscosity(T, rho)  ·L484: Dynamic viscosity μ [Pa·s]. Batched over leading axis.
-- @jax.jit thermal_conductivity(T, rho)  ·L498: Thermal conductivity λ [W/(m·K)]. Batched over leading axis.
-- @jax.jit bulk_viscosity(T, rho)  ·L512: Bulk viscosity ζ [Pa·s]. Batched over leading axis.
+- const TC  ·L26
+- const RHOC_MOLAR  ·L27
+- const M  ·L28
+- const R_MOLAR  ·L29
+- const PC  ·L30
+- const RHOC_MASS  ·L31
+- const _ETA0_A  ·L48
+- _eta_dilute(T)  ·L59: Dilute-gas viscosity η₀(T) [Pa·s].
+- const _EPSILON_OVER_K  ·L77
+- const _SIGMA  ·L78
+- const _NA  ·L79
+- const _RF_B  ·L81
+- const _RF_T  ·L85
+- _eta_initial(T, rho_molar, eta0)  ·L88: Initial-density viscosity contribution [Pa·s].
+- const _TT  ·L111
+- const _RHO_TL  ·L112
+- const _C1  ·L113
+- const _C2  ·L114
+- const _GAMMA_VISC  ·L115
+- const _ETA_TL  ·L118
+- _eta_residual(T, rho_mass)  ·L123: Higher-order viscosity contribution [Pa·s].
+- _scalar_viscosity(T, rho)  ·L134: Dynamic viscosity μ [Pa·s] at scalar (T, ρ [kg/m³]).
+- const _LAM0_L  ·L148
+- _lambda_dilute(T)  ·L151: Dilute-gas thermal conductivity λ₀(T) [W/(m·K)].
+- const _LAM_RES_B  ·L161
+- const _LAM_RES_D  ·L165
+- const _LAM_RES_T  ·L166
+- const _RHOMASS_REDUCING  ·L168
+- _lambda_residual(T, rho)  ·L171: Residual thermal conductivity [W/(m·K)].
+- const _KB  ·L188
+- const _R0  ·L189
+- const _GAMMA_CE  ·L190
+- const _GAMMA_EXP  ·L191
+- const _NU  ·L192
+- const _XI0  ·L193
+- const _QD  ·L194
+- const _T_REF  ·L195
+- @jax.custom_jvp _xi_of_excess(diff)  ·L198: ξ = ξ₀ (max(Δχ̃, 0)/Γ)^(ν/γ) [m], zero where Δχ̃ ≤ 0.
+- @_xi_of_excess.defjvp _xi_of_excess_jvp(primals, tangents)  ·L211
+- const _P11_A  ·L230
+- const _P11_T  ·L231
+- const _SIGMA_HS  ·L232
+- const _A_MFP  ·L233
+- const _RHO_MFP_SWITCH  ·L234
+- const _RHO_MFP_WIDTH  ·L235
+- const _R_B  ·L238
+- _vibrational_relaxation_time(T, rho)  ·L241: Isothermal vibrational relaxation time τ₁₁ [s] at scalar (T, ρ).
+- _build(eos)  ·L281: The EOS-coupled transport kernels on backend ``eos``, as a namespace.
+- const _BUILT  ·L524
+- for_eos(eos)  ·L527: The EOS-coupled kernels of backend ``eos`` (built once, on request).
+- const _SW  ·L538
+- const _HAVE_CHI_CHEB  ·L539
+- @jax.jit viscosity(T, rho)  ·L556: Dynamic viscosity μ [Pa·s]. Batched over leading axis.
+- @jax.jit thermal_conductivity(T, rho)  ·L570: Thermal conductivity λ [W/(m·K)]. Batched over leading axis.
+- @jax.jit bulk_viscosity(T, rho)  ·L584: Bulk viscosity ζ [Pa·s]. Batched over leading axis.
 
 ### examples/readme_check.py
 _Run every Python snippet from README.md and print results._
@@ -433,35 +496,55 @@ _Run every Python snippet from README.md and print results._
 
 ### scripts/generate_chi_ref_table.py
 _Generate the chi_ref Chebyshev table for the thermal-conductivity_
-- const T_REF  ·L30
-- const DEGREE  ·L32
-- const OUT  ·L34
-- f_exact(delta)  ·L37
-- main()  ·L43
+- const T_REF  ·L29
+- const DEGREE  ·L31
+- main()  ·L33
 
 ### scripts/generate_saturation_table.py
-_Generate CO2 saturation table from Span-Wagner EOS._
-- const T_TRIPLE  ·L30
-- const T_CRIT  ·L31
-- const T_NEAR_CRIT  ·L32
-- const DATA_DIR  ·L34
-- gibbs(T, rho)  ·L37: Specific Gibbs energy g = h - T*s [J/kg].
-- maxwell_residual(log_rhos, T)  ·L44: Residual for Maxwell construction in log-density space.
-- build_temperature_grid(n_bulk=300, n_near=300, n_vnear=200)  ·L65: Non-uniform T grid: bulk + near-critical + very-near-critical.
-- solve_saturation_curve(T_grid)  ·L81: Solve Maxwell construction at each temperature.
-- fit_and_save(T_grid, P_sat, rho_l, rho_v, h_l, h_v, s_l, s_v)  ·L142: Fit cubic splines and save coefficients to npz.
-- main()  ·L174
+_Generate a CO2 saturation table from one of the package's EOS backends._
+- const TC  ·L39
+- const RHOC  ·L39
+- const R  ·L39
+- const PC  ·L39
+- const T_TRIPLE  ·L39
+- const T_CRIT  ·L39
+- const T_NEAR_CRIT  ·L39
+- const OUT_PATH  ·L42
+- const EOS  ·L43
+- _configure(eos)  ·L46: Bind the module's constants and property functions to backend eos.
+- _aux_nist2026(T)  ·L71: NIST IR 8608 Eqs. 17 and 18: saturated (ρ_L, ρ_V) [kg/m³] at T.
+- gibbs(T, rho)  ·L80: Specific Gibbs energy g = h - T*s [J/kg].
+- maxwell_residual(log_rhos, T)  ·L87: Residual for Maxwell construction in log-density space.
+- maxwell_jacobian(log_rhos, T)  ·L98: Exact Jacobian of maxwell_residual (jax.jacfwd).
+- build_temperature_grid(n_bulk=300, n_near=300, n_vnear=200)  ·L103: Non-uniform T grid: bulk + near-critical + very-near-critical.
+- solve_saturation_curve(T_grid)  ·L119: Solve Maxwell construction at each temperature.
+- fit_and_save(T_grid, P_sat, rho_l, rho_v, h_l, h_v, s_l, s_v)  ·L187: Fit cubic splines and save coefficients to npz.
+- main()  ·L219
 
 ### scripts/generate_seed_table.py
 _Generate the (ρ, u) → T Newton seed table for the inversion hot path._
-- const NU  ·L40
-- const OUT  ·L42
-- _u_cv(T, rho)  ·L45
-- _solve_T(rho, u)  ·L49: Robust offline solve: damped Newton from the supercritical side.
-- main()  ·L67
+- const TC  ·L43
+- const NU  ·L47
+- _u_cv(T, rho)  ·L51
+- _solve_T(rho, u)  ·L55: Robust offline solve: damped Newton from the supercritical side.
+- main()  ·L73
 
 ### tests/__init__.py
 - _(no top-level symbols)_
+
+### tests/sw_default_probe.py
+_Evaluate the public API at its defaults on a fixed grid; write an .npz._
+- put(prefix, value)  ·L22
+- const T1  ·L33
+- const R1  ·L35
+- const TT  ·L37
+- const RR  ·L38
+- const U  ·L42
+- const P1  ·L51
+- const T2  ·L52
+- const H1  ·L59
+- const TS  ·L65
+- const PS  ·L66
 
 ### tests/test_accuracy_vs_coolprop.py
 _Headline accuracy test against CoolProp._
@@ -588,6 +671,76 @@ _Guard: docs/MAP.md stays in sync with the source._
 - const REPO_ROOT  ·L14
 - test_map_is_fresh()  ·L17
 
+### tests/test_nist2026_backend.py
+_The static ``eos`` switch reaches every public function, on nist2026 too._
+- const E  ·L20
+- test_unknown_eos_raises()  ·L23
+- test_every_public_function_takes_eos()  ·L30
+- test_backends_differ_where_they_should()  ·L60
+- test_rho_u_round_trip_at_round_off_near_critical()  ·L68
+- test_gradients_finite_at_the_widom_crossing()  ·L79
+- test_transport_reads_the_nist2026_surface()  ·L87
+
+### tests/test_nist2026_derivs.py
+_The nist2026 analytic Helmholtz derivatives must match jax.grad._
+- _grid()  ·L37
+- const PTS  ·L50
+- _rel(a, b)  ·L53
+- test_residual_derivs_match_autodiff()  ·L57
+- test_ideal_derivs_match_autodiff()  ·L67
+- test_fast_tau_path_matches_full()  ·L80: The δ-precomputed Newton inner-loop pair equals the full bundle.
+- test_kernel_is_jittable_vmappable_and_twice_differentiable()  ·L91
+- test_steep_gaussians_underflow_cleanly_at_the_widom_crossing()  ·L102: Terms 22 to 24 (β = 2.2e4, 6e4, 1e6) centre below T_c; at FluxTech's
+
+### tests/test_nist2026_near_critical.py
+_The near-critical regression the nist2026 backend exists for._
+- const TC  ·L38
+- const T_ISO  ·L39
+- const RHO_ISO  ·L40
+- const M_NIST  ·L41
+- _dcv_dT(eos)  ·L44
+- _turning_points(y)  ·L51
+- test_dcv_dT_monotone_and_finite_on_nist2026()  ·L56
+- test_dcv_dT_oscillates_on_span_wagner()  ·L69
+- _scan(eos, T, key)  ·L81
+- @pytest.mark.parametrize test_single_smooth_peak_on_nist2026(T, key, peak, at)  ·L96
+- @pytest.mark.parametrize test_span_wagner_dip(T, key)  ·L105
+
+### tests/test_nist2026_saturation.py
+_The nist2026 saturation table, its auxiliary-equation check and the dome._
+- const E  ·L29
+- _aux(T, a, t)  ·L32
+- test_auxiliary_equations_against_table()  ·L37
+- @pytest.mark.parametrize test_table_round_trip_against_maxwell(T)  ·L51
+- const P_DOME  ·L65
+- test_dome_detection_on_nist2026()  ·L68
+- test_dome_gradients_finite_on_nist2026()  ·L88
+
+### tests/test_nist2026_verification.py
+_nist2026 reproduces the values NIST IR 8608 computes from its equation._
+- _maxwell(T, rho_l0, rho_v0, iters=40)  ·L31: Coexisting (ρ_l, ρ_v) at T: Newton on (ln ρ_l, ln ρ_v).
+- _printed(value, printed, half_unit)  ·L47
+- test_critical_pressure_table1()  ·L51
+- test_critical_density_mass_units_p3()  ·L55
+- test_critical_point_conditions()  ·L59
+- test_reference_state_saturated_liquid_273K()  ·L67
+- test_triple_point_pressure_table1()  ·L76
+- test_acentric_factor_table1()  ·L81
+
+### tests/test_nist2026_vs_span_wagner.py
+_nist2026 against Span-Wagner away from the critical point._
+- const T1  ·L38
+- const P1  ·L39
+- const STATED  ·L41
+- const BANDS  ·L42
+- _states(eos)  ·L49
+- @pytest.fixture both()  ·L58
+- _check(ref, nb, keep, key)  ·L69
+- @pytest.mark.parametrize test_against_span_wagner(both, key)  ·L78
+- test_reference_state_shared()  ·L84
+- test_enthalpy_entropy_differences_bounded(both)  ·L93
+- test_against_coolprop(both)  ·L99
+
 ### tests/test_no_coolprop_runtime.py
 _Discipline test: the runtime package must not import CoolProp._
 - const PKG_ROOT  ·L16
@@ -625,6 +778,14 @@ _The (ρ, u) → T inversion and the fused properties_from_rho_u path._
 - _fd(f, x, i, eps=1e-06)  ·L66
 - @pytest.mark.parametrize test_inversion_gradients(T0, rho0)  ·L75
 - test_properties_from_rho_u_differentiable()  ·L93: grad through the fused path (e.g. dP/du) is finite and matches FD.
+
+### tests/test_sw_default_bit_for_bit.py
+_The Span-Wagner default is bit for bit the 0.5.0 package._
+- const REPO  ·L23
+- const PROBE  ·L24
+- const REF_COMMIT  ·L25
+- _run_probe(root, out)  ·L28
+- test_sw_default_bit_for_bit(tmp_path)  ·L40
 
 ## Other source files
 
