@@ -1,7 +1,10 @@
 """CO2 saturation curve lookups: pure JAX, JIT-compilable.
 
 Loads a precomputed saturation table (cubic spline coefficients) generated
-by scripts/generate_saturation_table.py from the Span-Wagner EOS.
+by scripts/generate_saturation_table.py by a Maxwell construction on the
+selected backend's surface: ``saturation_table.npz`` for Span-Wagner (the
+default), ``saturation_table_nist2026.npz`` for ``eos="nist2026"``.  Every
+lookup takes the static keyword ``eos``.
 
 All lookup functions use cubic spline interpolation and are fully
 differentiable and JIT-compilable. They accept scalar or array inputs.
@@ -15,26 +18,32 @@ Usage:
 import jax
 import jax.numpy as jnp
 import numpy as np
-from pathlib import Path
+from functools import partial
+from types import SimpleNamespace
 
 jax.config.update("jax_enable_x64", True)
 
-_TABLE_PATH = Path(__file__).parent / "data" / "saturation_table.npz"
+from co2_eos import backends as _backends
+from co2_eos.backends import DEFAULT_EOS
 
 # ── Table loading (lazy, once) ───────────────────────────────────────────
 # Table is loaded outside JIT tracing to avoid tracer leaks.
 # JAX arrays are stored as module globals; JIT captures them as constants.
 
-_TABLE = {}
+_TABLES = {}
 
 
-def _ensure_loaded():
-    """Load saturation table on first use. Must be called outside JIT."""
-    if _TABLE:
+def _ensure_loaded(eos=DEFAULT_EOS):
+    """Load the backend's saturation table on first use. Call outside JIT."""
+    if eos in _TABLES:
         return
-    data = np.load(_TABLE_PATH)
-    for k in data:
-        _TABLE[k] = jnp.array(data[k])
+    data = np.load(_backends.table_path(eos, "saturation_table"))
+    _TABLES[eos] = {k: jnp.array(data[k]) for k in data}
+
+
+def _table(eos):
+    _ensure_loaded(eos)
+    return _TABLES[eos]
 
 
 # ── Cubic spline evaluation ─────────────────────────────────────────────
@@ -63,94 +72,108 @@ def _eval_spline(x, breaks, coeffs):
 
 # ── T-based lookups ─────────────────────────────────────────────────────
 
-def saturation_pressure(T):
+def saturation_pressure(T, eos=DEFAULT_EOS):
     """Saturation pressure P_sat [Pa] at temperature T [K].
 
     Valid for T in [216.592, 304.127] K (triple point to near-critical).
     JIT-compilable and differentiable.
     """
-    _ensure_loaded()
-    return _eval_spline(T, _TABLE['T_breaks'], _TABLE['P_sat_c'])
+    tab = _table(eos)
+    return _eval_spline(T, tab['T_breaks'], tab['P_sat_c'])
 
 
-def saturation_densities(T):
+def saturation_densities(T, eos=DEFAULT_EOS):
     """Saturated liquid and vapor densities [kg/m3] at temperature T [K].
 
     Returns:
         (rho_l, rho_v): liquid and vapor densities
     """
-    _ensure_loaded()
-    rho_l = _eval_spline(T, _TABLE['T_breaks'], _TABLE['rho_l_c'])
-    rho_v = _eval_spline(T, _TABLE['T_breaks'], _TABLE['rho_v_c'])
+    tab = _table(eos)
+    rho_l = _eval_spline(T, tab['T_breaks'], tab['rho_l_c'])
+    rho_v = _eval_spline(T, tab['T_breaks'], tab['rho_v_c'])
     return rho_l, rho_v
 
 
-def saturation_enthalpies_T(T):
+def saturation_enthalpies_T(T, eos=DEFAULT_EOS):
     """Saturated liquid and vapor enthalpies [J/kg] at temperature T [K].
 
     Returns:
         (h_l, h_v)
     """
-    _ensure_loaded()
-    h_l = _eval_spline(T, _TABLE['T_breaks'], _TABLE['h_l_c'])
-    h_v = _eval_spline(T, _TABLE['T_breaks'], _TABLE['h_v_c'])
+    tab = _table(eos)
+    h_l = _eval_spline(T, tab['T_breaks'], tab['h_l_c'])
+    h_v = _eval_spline(T, tab['T_breaks'], tab['h_v_c'])
     return h_l, h_v
 
 
-def saturation_entropies(T):
+def saturation_entropies(T, eos=DEFAULT_EOS):
     """Saturated liquid and vapor entropies [J/(kg*K)] at temperature T [K].
 
     Returns:
         (s_l, s_v)
     """
-    _ensure_loaded()
-    s_l = _eval_spline(T, _TABLE['T_breaks'], _TABLE['s_l_c'])
-    s_v = _eval_spline(T, _TABLE['T_breaks'], _TABLE['s_v_c'])
+    tab = _table(eos)
+    s_l = _eval_spline(T, tab['T_breaks'], tab['s_l_c'])
+    s_v = _eval_spline(T, tab['T_breaks'], tab['s_v_c'])
     return s_l, s_v
 
 
 # ── P-based lookups ─────────────────────────────────────────────────────
 
-def saturation_temperature(P):
+def saturation_temperature(P, eos=DEFAULT_EOS):
     """Saturation temperature T_sat [K] at pressure P [Pa].
 
     Valid for P in [P_triple, P_near_crit].
     """
-    _ensure_loaded()
-    return _eval_spline(P, _TABLE['P_breaks'], _TABLE['T_sat_c'])
+    tab = _table(eos)
+    return _eval_spline(P, tab['P_breaks'], tab['T_sat_c'])
 
 
-def saturation_enthalpies(P):
+def saturation_enthalpies(P, eos=DEFAULT_EOS):
     """Saturated liquid and vapor enthalpies [J/kg] at pressure P [Pa].
 
     Returns:
         (h_l, h_v)
     """
-    _ensure_loaded()
-    h_l = _eval_spline(P, _TABLE['P_breaks'], _TABLE['h_l_P_c'])
-    h_v = _eval_spline(P, _TABLE['P_breaks'], _TABLE['h_v_P_c'])
+    tab = _table(eos)
+    h_l = _eval_spline(P, tab['P_breaks'], tab['h_l_P_c'])
+    h_v = _eval_spline(P, tab['P_breaks'], tab['h_v_P_c'])
     return h_l, h_v
 
 
-def saturation_densities_P(P):
+def saturation_densities_P(P, eos=DEFAULT_EOS):
     """Saturated liquid and vapor densities [kg/m3] at pressure P [Pa].
 
     Returns:
         (rho_l, rho_v)
     """
-    _ensure_loaded()
-    rho_l = _eval_spline(P, _TABLE['P_breaks'], _TABLE['rho_l_P_c'])
-    rho_v = _eval_spline(P, _TABLE['P_breaks'], _TABLE['rho_v_P_c'])
+    tab = _table(eos)
+    rho_l = _eval_spline(P, tab['P_breaks'], tab['rho_l_P_c'])
+    rho_v = _eval_spline(P, tab['P_breaks'], tab['rho_v_P_c'])
     return rho_l, rho_v
 
 
-def saturation_entropies_P(P):
+def saturation_entropies_P(P, eos=DEFAULT_EOS):
     """Saturated liquid and vapor entropies [J/(kg*K)] at pressure P [Pa].
 
     Returns:
         (s_l, s_v)
     """
-    _ensure_loaded()
-    s_l = _eval_spline(P, _TABLE['P_breaks'], _TABLE['s_l_P_c'])
-    s_v = _eval_spline(P, _TABLE['P_breaks'], _TABLE['s_v_P_c'])
+    tab = _table(eos)
+    s_l = _eval_spline(P, tab['P_breaks'], tab['s_l_P_c'])
+    s_v = _eval_spline(P, tab['P_breaks'], tab['s_v_P_c'])
     return s_l, s_v
+
+
+_LOOKUPS = ("saturation_pressure", "saturation_densities",
+            "saturation_enthalpies_T", "saturation_entropies",
+            "saturation_temperature", "saturation_enthalpies",
+            "saturation_densities_P", "saturation_entropies_P")
+
+
+def for_eos(eos):
+    """The lookups bound to backend ``eos``, under their module names."""
+    _backends.get(eos)
+    ns = {name: partial(globals()[name], eos=eos) for name in _LOOKUPS}
+    return SimpleNamespace(eos=eos, _ensure_loaded=partial(_ensure_loaded, eos),
+                           **ns)

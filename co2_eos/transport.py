@@ -15,11 +15,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from functools import partial
+from types import SimpleNamespace
 
 jax.config.update("jax_enable_x64", True)
 
 # ── Shared constants ──────────────────────────────────────────────────────
-# Use the same values as the Span-Wagner EOS module.
+# The correlations' reducing and molecular constants (Span-Wagner's values,
+# which Huber 2016 and Laesecke-Muzny 2017 were fitted with); the EOS-coupled
+# half below reads the selected backend's own.
 TC = 304.1282            # K
 RHOC_MOLAR = 10624.9063  # mol/m³
 M = 0.0440098            # kg/mol
@@ -31,10 +34,10 @@ RHOC_MASS = RHOC_MOLAR * M  # kg/m³ ≈ 467.60
 # Residual Helmholtz derivatives (analytic, shared with the thermo core)
 # ═══════════════════════════════════════════════════════════════════════════
 # The conductivity critical enhancement needs αʳ_δ, αʳ_δδ, αʳ_ττ, αʳ_δτ and
-# α⁰_ττ.  We take them from the analytic ``helmholtz`` kernel rather than
-# jax.grad, and let the fused (ρ, u) path pass in the values it already
+# α⁰_ττ.  We take them from the selected backend's analytic kernel rather
+# than jax.grad, and let the fused (ρ, u) path pass in the values it already
 # computed at (T, ρ) so the enhancement costs no extra Helmholtz evaluation.
-from co2_eos import helmholtz as _hz
+from co2_eos import backends as _backends
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -191,47 +194,6 @@ _XI0 = 1.5e-10         # m, correlation-length amplitude ξ₀
 _QD = 2.5e9            # 1/m
 _T_REF = 456.19        # K
 
-# The enhancement needs dp/dρ at the fixed reference temperature, a smooth
-# function of δ alone.  A precomputed degree-100 Chebyshev fit (3e-13 max rel
-# error over δ ∈ [0, 2.75]; scripts/generate_chi_ref_table.py) replaces the
-# full residual bundle at τ_ref.  Tolerant of a missing file so the generator
-# script can import this package to BUILD the table; the exact bundle is the
-# fallback, so the fallback changes speed only, never values.
-_CHI_PATH = Path(__file__).parent / "data" / "chi_ref_cheb.npz"
-_HAVE_CHI_CHEB = False
-try:
-    _chi = np.load(_CHI_PATH)
-    _CHI_COEFS = jnp.asarray(_chi["coefs"])
-    _CHI_LO = float(_chi["delta_lo"])
-    _CHI_HI = float(_chi["delta_hi"])
-    if float(_chi["t_ref"]) != _T_REF:
-        raise ValueError(
-            f"chi_ref_cheb.npz was generated for T_ref={float(_chi['t_ref'])},"
-            f" transport uses {_T_REF}: regenerate the table")
-    _HAVE_CHI_CHEB = True
-except FileNotFoundError:
-    pass
-
-
-def _dpdrho_ref_reduced(delta):
-    """1 + 2δ·αʳ_δ + δ²·αʳ_δδ at T_ref: Chebyshev-Clenshaw (or exact fallback).
-
-    Queries are clamped to the fit box; beyond δ = 2.75 the enhancement is
-    zero anyway (χ − χ_ref < 0 there).
-    """
-    if not _HAVE_CHI_CHEB:
-        tau_ref = TC / _T_REF
-        _, ar_d, _, ar_dd, _, _ = _hz.residual_derivs(tau_ref, delta)
-        return 1.0 + 2.0 * delta * ar_d + delta * delta * ar_dd
-    x = jnp.clip((2.0 * delta - (_CHI_LO + _CHI_HI)) / (_CHI_HI - _CHI_LO),
-                 -1.0, 1.0)
-    b1 = jnp.zeros_like(delta)
-    b2 = jnp.zeros_like(delta)
-    for c in np.asarray(_CHI_COEFS)[:0:-1]:
-        b1, b2 = 2.0 * x * b1 - b2 + float(c), b1
-    return x * b1 - b2 + float(np.asarray(_CHI_COEFS)[0])
-
-
 @jax.custom_jvp
 def _xi_of_excess(diff):
     """ξ = ξ₀ (max(Δχ̃, 0)/Γ)^(ν/γ) [m], zero where Δχ̃ ≤ 0.
@@ -254,134 +216,6 @@ def _xi_of_excess_jvp(primals, tangents):
                       (_NU / _GAMMA_EXP) * xi / jnp.where(positive, diff, 1.0),
                       0.0)
     return xi, slope * ddiff
-
-
-def _correlation_length_and_excess(T, rho, alr_d, alr_dd):
-    """Olchowy-Sengers correlation length ξ [m] and the susceptibility excess.
-
-    ξ = ξ₀ (Δχ̃/Γ)^(ν/γ) with Δχ̃ = χ̃(T, ρ) − χ̃(T_ref, ρ) T_ref/T, and ξ = 0
-    where Δχ̃ ≤ 0.  Shared by the conductivity enhancement and the critical
-    bulk viscosity, so both read one ξ.  Takes αʳ_δ and αʳ_δδ at (T, ρ).
-
-    ξ(Δχ̃) is :func:`_xi_of_excess`, whose derivative is finite where ξ = 0.
-
-    Returns (ξ, Δχ̃).
-    """
-    rho_molar = rho / M
-    delta = rho_molar / RHOC_MOLAR        # == rho / RHOC_MASS
-
-    # ── dp/dρ at (T, ρ) ──
-    dp_drho_mol = R_MOLAR * T * (1.0 + 2.0 * delta * alr_d
-                                  + delta ** 2 * alr_dd)
-    chi = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_mol
-
-    # ── dp/dρ at reference temperature T_ref (same δ; precomputed fit) ──
-    dp_drho_ref = R_MOLAR * _T_REF * _dpdrho_ref_reduced(delta)
-    chi_ref = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_ref * _T_REF / T
-
-    diff = chi - chi_ref
-    return _xi_of_excess(diff), diff
-
-
-def _lambda_critical_formula(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt,
-                             guarded):
-    """The enhancement's formula; ``guarded`` (static) is its derivative form.
-
-    Unguarded it is the enhancement's value, the 0.4.0 operations bit for bit.
-    Guarded, the zeroed branch (ξ = 0) is evaluated at a placeholder ξ, so 1/ξ
-    there is finite and the final ``where`` passes a zero tangent rather than
-    0·∞ = NaN; where ξ > 0 the two agree.
-    """
-    rho_molar = rho / M
-    tau = TC / T
-    delta = rho_molar / RHOC_MOLAR        # == rho / RHOC_MASS
-
-    xi, diff = _correlation_length_and_excess(T, rho, alr_d, alr_dd)
-    if guarded:
-        xi = jnp.where(diff > 0.0, xi, _XI0)
-
-    # ── Molar heat capacities from the shared EOS derivatives ──
-    cv_over_R = -tau ** 2 * (al0_tt + alr_tt)
-    num_cp = (1.0 + delta * alr_d - delta * tau * alr_dt) ** 2
-    den_cp = 1.0 + 2.0 * delta * alr_d + delta ** 2 * alr_dd
-    cp_over_R = cv_over_R + num_cp / den_cp
-
-    cv_molar = R_MOLAR * cv_over_R
-    cp_molar = R_MOLAR * cp_over_R
-
-    # ── Ω functions ──
-    qd_xi = _QD * xi
-    inv_qd_xi = 1.0 / jnp.maximum(qd_xi, 1e-300)
-
-    omega = (2.0 / jnp.pi) * (
-        (cp_molar - cv_molar) / cp_molar * jnp.arctan(qd_xi)
-        + cv_molar / cp_molar * qd_xi
-    )
-    omega0 = (2.0 / jnp.pi) * (
-        1.0 - jnp.exp(-1.0 / (inv_qd_xi
-                                + (qd_xi) ** 2 / (3.0 * delta ** 2)))
-    )
-
-    # ── Critical enhancement ──
-    xi_safe = jnp.maximum(xi, 1e-300)
-    lam_c = (rho_molar * cp_molar * _R0 * _KB * T
-             / (6.0 * jnp.pi * mu * xi_safe)
-             * (omega - omega0))
-
-    # Zero out when diff <= 0 (no enhancement)
-    return jnp.where(diff > 0.0, lam_c, 0.0)
-
-
-@jax.custom_jvp
-def _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt):
-    """Critical enhancement of thermal conductivity [W/(m·K)].
-
-    Takes the reduced residual derivatives αʳ_δ, αʳ_δδ, αʳ_ττ, αʳ_δτ and the
-    ideal α⁰_ττ at (T, ρ); the caller (thermo kernel or fused (ρ, u) path)
-    has already computed these, so the enhancement adds only the reference-T
-    δ-derivative pair.  μ [Pa·s] is passed in to avoid a circular dependency.
-
-    The reduced derivatives are identical whether δ is formed from molar or
-    mass density (δ = ρ/ρc dimensionless), so the shared values apply directly.
-    """
-    return _lambda_critical_formula(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt,
-                                    al0_tt, guarded=False)
-
-
-@_lambda_critical_shared.defjvp
-def _lambda_critical_shared_jvp(primals, tangents):
-    """The value from the plain formula, the tangent from the guarded one."""
-    value = _lambda_critical_shared(*primals)
-    _, tangent = jax.jvp(
-        lambda *a: _lambda_critical_formula(*a, guarded=True), primals, tangents)
-    return value, tangent
-
-
-# ── Scalar thermal conductivity ──────────────────────────────────────────
-
-def _thermal_conductivity_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt,
-                                 al0_tt):
-    """λ [W/(m·K)] reusing reduced derivatives already computed at (T, ρ).
-
-    Used by the fused (ρ, u) path so the conductivity costs no extra Helmholtz
-    evaluation beyond the reference-T δ-derivatives.
-    """
-    lam0 = _lambda_dilute(T)
-    lam_res = _lambda_residual(T, rho)
-    lam_crit = _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt,
-                                       alr_dt, al0_tt)
-    return lam0 + lam_res + lam_crit
-
-
-def _scalar_thermal_conductivity(T, rho):
-    """Thermal conductivity λ [W/(m·K)] at scalar (T, ρ [kg/m³])."""
-    mu = _scalar_viscosity(T, rho)
-    tau = TC / T
-    delta = rho / RHOC_MASS
-    _, alr_d, _, alr_dd, alr_tt, alr_dt = _hz.residual_derivs(tau, delta)
-    _, _, al0_tt = _hz.ideal_derivs(tau, delta)
-    return _thermal_conductivity_shared(T, rho, mu, alr_d, alr_dd, alr_tt,
-                                        alr_dt, al0_tt)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -428,52 +262,290 @@ def _vibrational_relaxation_time(T, rho):
     return lam / (v_mean * p11)
 
 
-def _bulk_viscosity_parts(T, rho, mu, w, cp, cv, al0_tt, xi):
-    """(ζ_vib, ζ_crit, τ₁₁) at scalar (T, ρ) from quantities already at hand.
-
-    ζ_vib = ρc²(γ − 1)Δ(1 − Δ)τ₁₁ with γ = c_p/c_v and Δ = c_vib/c_p: the
-    low-frequency limit of the single-relaxation-time absorption (Lin &
-    Trusler 2014, Eq. 1).  c_vib = c_v⁰ − (5/2)R/M is the ideal-gas isochoric
-    heat capacity less its translational and rotational parts, from the
-    Span-Wagner ideal part (c_v⁰/R = −τ²α⁰_ττ).  c, c_p, c_v are the
-    equilibrium EOS values.
-
-    ζ_crit = R_B ρc² t_ξ with t_ξ = 6πμξ³/(k_B T) (Onuki 2007, B4), ξ the
-    Olchowy-Sengers correlation length and μ the background viscosity
-    (Laesecke-Muzny carries no critical enhancement).  ζ_crit = 0 where ξ = 0.
-    """
-    tau_red = TC / T
-    r_mass = R_MOLAR / M
-    c_vib = r_mass * (-tau_red ** 2 * al0_tt - 2.5)
-    frac = c_vib / cp
-    gamma = cp / cv
-    rho_c2 = rho * w * w
-    tau11 = _vibrational_relaxation_time(T, rho)
-    zeta_vib = rho_c2 * (gamma - 1.0) * frac * (1.0 - frac) * tau11
-    t_xi = 6.0 * jnp.pi * mu * xi ** 3 / (_KB * T)
-    zeta_crit = _R_B * rho_c2 * t_xi
-    return zeta_vib, zeta_crit, tau11
+# ═══════════════════════════════════════════════════════════════════════════
+# The EOS-coupled half: built once per backend
+# ═══════════════════════════════════════════════════════════════════════════
+# The critical enhancement and the bulk viscosity read the selected backend's
+# thermodynamics: (∂p/∂ρ)_T at (T, ρ) and at T_ref, c_p, c_v and the ideal
+# α°_ττ, from that backend's analytic kernel, gas constant, molar mass and
+# critical density.  The correlations' own parameters stay fixed whatever the
+# backend (NIST IR 8608, Sec. 11: Huber 2016 and Laesecke-Muzny 2017 keep
+# their parameters on the new equation): the scaling p_c/ρ_c² of χ̃, ξ₀, Γ,
+# R₀, q_D, T_ref, the λ₀ and λ_res reducing values and τ₁₁'s kinetic
+# constants.  Molar quantities are expressed in the correlation's molar units
+# (``M`` above): the backend's molar R and ρ_c are carried as
+# R_MOL_X = R_b·M/M_b and RHOC_MOL_X = ρ_c,b·M_b/M, both exactly the
+# module's own values for Span-Wagner, so its operations are those of 0.5.0.
 
 
-def _bulk_viscosity_shared(T, rho, mu, w, cp, cv, al0_tt, xi):
-    """ζ [Pa·s] reusing quantities the fused (T, ρ) path already computed."""
-    zeta_vib, zeta_crit, _ = _bulk_viscosity_parts(T, rho, mu, w, cp, cv,
-                                                   al0_tt, xi)
-    return zeta_vib + zeta_crit
+def _build(eos):
+    """The EOS-coupled transport kernels on backend ``eos``, as a namespace."""
+    _b = _backends.get(eos)
+    hz = _b.kernel
+    TC_B = _b.surface.TC
+    R_MOLAR_B = _b.surface.R_MOLAR
+    M_B = _b.surface.M
+    RHOC_B = _b.surface.RHOC
+    R_MOL_X = R_MOLAR_B * (M / M_B)
+    RHOC_MOL_X = _b.surface.RHOC_MOLAR * (M_B / M)
+
+    # The enhancement needs dp/dρ at the fixed reference temperature, a smooth
+    # function of δ alone.  A precomputed degree-100 Chebyshev fit (3e-13 max rel
+    # error over δ ∈ [0, 2.75]; scripts/generate_chi_ref_table.py) replaces the
+    # full residual bundle at τ_ref.  Tolerant of a missing file so the generator
+    # script can import this package to BUILD the table; the exact bundle is the
+    # fallback, so the fallback changes speed only, never values.
+    _CHI_PATH = _backends.table_path(eos, "chi_ref_cheb")
+    _HAVE_CHI_CHEB = False
+    try:
+        _chi = np.load(_CHI_PATH)
+        _CHI_COEFS = jnp.asarray(_chi["coefs"])
+        _CHI_LO = float(_chi["delta_lo"])
+        _CHI_HI = float(_chi["delta_hi"])
+        if float(_chi["t_ref"]) != _T_REF:
+            raise ValueError(
+                f"chi_ref_cheb.npz was generated for T_ref={float(_chi['t_ref'])},"
+                f" transport uses {_T_REF}: regenerate the table")
+        _HAVE_CHI_CHEB = True
+    except FileNotFoundError:
+        pass
 
 
-def _scalar_bulk_viscosity(T, rho):
-    """Bulk viscosity ζ [Pa·s] at scalar (T, ρ [kg/m³]).
+    def _dpdrho_ref_reduced(delta):
+        """1 + 2δ·αʳ_δ + δ²·αʳ_δδ at T_ref: Chebyshev-Clenshaw (or exact fallback).
 
-    The equilibrium c, c_p, c_v come from the thermo kernel in ``core``
-    (imported here, at trace time, since ``core`` imports this module).
-    """
-    from co2_eos.core import _thermo
-    (_, cv, cp, w, *_), aux = _thermo(T, rho)
-    ar_d, ar_dd, _, _, a0_tt = aux
-    mu = _scalar_viscosity(T, rho)
-    xi, _ = _correlation_length_and_excess(T, rho, ar_d, ar_dd)
-    return _bulk_viscosity_shared(T, rho, mu, w, cp, cv, a0_tt, xi)
+        Queries are clamped to the fit box; beyond δ = 2.75 the enhancement is
+        zero anyway (χ − χ_ref < 0 there).
+        """
+        if not _HAVE_CHI_CHEB:
+            tau_ref = TC_B / _T_REF
+            _, ar_d, _, ar_dd, _, _ = hz.residual_derivs(tau_ref, delta)
+            return 1.0 + 2.0 * delta * ar_d + delta * delta * ar_dd
+        x = jnp.clip((2.0 * delta - (_CHI_LO + _CHI_HI)) / (_CHI_HI - _CHI_LO),
+                     -1.0, 1.0)
+        b1 = jnp.zeros_like(delta)
+        b2 = jnp.zeros_like(delta)
+        for c in np.asarray(_CHI_COEFS)[:0:-1]:
+            b1, b2 = 2.0 * x * b1 - b2 + float(c), b1
+        return x * b1 - b2 + float(np.asarray(_CHI_COEFS)[0])
+
+
+    def _correlation_length_and_excess(T, rho, alr_d, alr_dd):
+        """Olchowy-Sengers correlation length ξ [m] and the susceptibility excess.
+
+        ξ = ξ₀ (Δχ̃/Γ)^(ν/γ) with Δχ̃ = χ̃(T, ρ) − χ̃(T_ref, ρ) T_ref/T, and ξ = 0
+        where Δχ̃ ≤ 0.  Shared by the conductivity enhancement and the critical
+        bulk viscosity, so both read one ξ.  Takes αʳ_δ and αʳ_δδ at (T, ρ).
+
+        ξ(Δχ̃) is :func:`_xi_of_excess`, whose derivative is finite where ξ = 0.
+
+        Returns (ξ, Δχ̃).
+        """
+        rho_molar = rho / M
+        delta = rho_molar / RHOC_MOL_X        # == rho / RHOC_B
+
+        # ── dp/dρ at (T, ρ) ──
+        dp_drho_mol = R_MOL_X * T * (1.0 + 2.0 * delta * alr_d
+                                      + delta ** 2 * alr_dd)
+        chi = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_mol
+
+        # ── dp/dρ at reference temperature T_ref (same δ; precomputed fit) ──
+        dp_drho_ref = R_MOL_X * _T_REF * _dpdrho_ref_reduced(delta)
+        chi_ref = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_ref * _T_REF / T
+
+        diff = chi - chi_ref
+        return _xi_of_excess(diff), diff
+
+
+    def _lambda_critical_formula(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt,
+                                 guarded):
+        """The enhancement's formula; ``guarded`` (static) is its derivative form.
+
+        Unguarded it is the enhancement's value, the 0.4.0 operations bit for bit.
+        Guarded, the zeroed branch (ξ = 0) is evaluated at a placeholder ξ, so 1/ξ
+        there is finite and the final ``where`` passes a zero tangent rather than
+        0·∞ = NaN; where ξ > 0 the two agree.
+        """
+        rho_molar = rho / M
+        tau = TC_B / T
+        delta = rho_molar / RHOC_MOL_X        # == rho / RHOC_B
+
+        xi, diff = _correlation_length_and_excess(T, rho, alr_d, alr_dd)
+        if guarded:
+            xi = jnp.where(diff > 0.0, xi, _XI0)
+
+        # ── Molar heat capacities from the shared EOS derivatives ──
+        cv_over_R = -tau ** 2 * (al0_tt + alr_tt)
+        num_cp = (1.0 + delta * alr_d - delta * tau * alr_dt) ** 2
+        den_cp = 1.0 + 2.0 * delta * alr_d + delta ** 2 * alr_dd
+        cp_over_R = cv_over_R + num_cp / den_cp
+
+        cv_molar = R_MOL_X * cv_over_R
+        cp_molar = R_MOL_X * cp_over_R
+
+        # ── Ω functions ──
+        qd_xi = _QD * xi
+        inv_qd_xi = 1.0 / jnp.maximum(qd_xi, 1e-300)
+
+        omega = (2.0 / jnp.pi) * (
+            (cp_molar - cv_molar) / cp_molar * jnp.arctan(qd_xi)
+            + cv_molar / cp_molar * qd_xi
+        )
+        omega0 = (2.0 / jnp.pi) * (
+            1.0 - jnp.exp(-1.0 / (inv_qd_xi
+                                    + (qd_xi) ** 2 / (3.0 * delta ** 2)))
+        )
+
+        # ── Critical enhancement ──
+        xi_safe = jnp.maximum(xi, 1e-300)
+        lam_c = (rho_molar * cp_molar * _R0 * _KB * T
+                 / (6.0 * jnp.pi * mu * xi_safe)
+                 * (omega - omega0))
+
+        # Zero out when diff <= 0 (no enhancement)
+        return jnp.where(diff > 0.0, lam_c, 0.0)
+
+
+    @jax.custom_jvp
+    def _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt, al0_tt):
+        """Critical enhancement of thermal conductivity [W/(m·K)].
+
+        Takes the reduced residual derivatives αʳ_δ, αʳ_δδ, αʳ_ττ, αʳ_δτ and the
+        ideal α⁰_ττ at (T, ρ); the caller (thermo kernel or fused (ρ, u) path)
+        has already computed these, so the enhancement adds only the reference-T
+        δ-derivative pair.  μ [Pa·s] is passed in to avoid a circular dependency.
+
+        The reduced derivatives are identical whether δ is formed from molar or
+        mass density (δ = ρ/ρc dimensionless), so the shared values apply directly.
+        """
+        return _lambda_critical_formula(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt,
+                                        al0_tt, guarded=False)
+
+
+    @_lambda_critical_shared.defjvp
+    def _lambda_critical_shared_jvp(primals, tangents):
+        """The value from the plain formula, the tangent from the guarded one."""
+        value = _lambda_critical_shared(*primals)
+        _, tangent = jax.jvp(
+            lambda *a: _lambda_critical_formula(*a, guarded=True), primals, tangents)
+        return value, tangent
+
+
+    # ── Scalar thermal conductivity ──────────────────────────────────────────
+
+    def _thermal_conductivity_shared(T, rho, mu, alr_d, alr_dd, alr_tt, alr_dt,
+                                     al0_tt):
+        """λ [W/(m·K)] reusing reduced derivatives already computed at (T, ρ).
+
+        Used by the fused (ρ, u) path so the conductivity costs no extra Helmholtz
+        evaluation beyond the reference-T δ-derivatives.
+        """
+        lam0 = _lambda_dilute(T)
+        lam_res = _lambda_residual(T, rho)
+        lam_crit = _lambda_critical_shared(T, rho, mu, alr_d, alr_dd, alr_tt,
+                                           alr_dt, al0_tt)
+        return lam0 + lam_res + lam_crit
+
+
+    def _scalar_thermal_conductivity(T, rho):
+        """Thermal conductivity λ [W/(m·K)] at scalar (T, ρ [kg/m³])."""
+        mu = _scalar_viscosity(T, rho)
+        tau = TC_B / T
+        delta = rho / RHOC_B
+        _, alr_d, _, alr_dd, alr_tt, alr_dt = hz.residual_derivs(tau, delta)
+        _, _, al0_tt = hz.ideal_derivs(tau, delta)
+        return _thermal_conductivity_shared(T, rho, mu, alr_d, alr_dd, alr_tt,
+                                            alr_dt, al0_tt)
+
+
+    def _bulk_viscosity_parts(T, rho, mu, w, cp, cv, al0_tt, xi):
+        """(ζ_vib, ζ_crit, τ₁₁) at scalar (T, ρ) from quantities already at hand.
+
+        ζ_vib = ρc²(γ − 1)Δ(1 − Δ)τ₁₁ with γ = c_p/c_v and Δ = c_vib/c_p: the
+        low-frequency limit of the single-relaxation-time absorption (Lin &
+        Trusler 2014, Eq. 1).  c_vib = c_v⁰ − (5/2)R/M is the ideal-gas isochoric
+        heat capacity less its translational and rotational parts, from the
+        backend's ideal part (c_v⁰/R = −τ²α⁰_ττ).  c, c_p, c_v are the
+        equilibrium EOS values.
+
+        ζ_crit = R_B ρc² t_ξ with t_ξ = 6πμξ³/(k_B T) (Onuki 2007, B4), ξ the
+        Olchowy-Sengers correlation length and μ the background viscosity
+        (Laesecke-Muzny carries no critical enhancement).  ζ_crit = 0 where ξ = 0.
+        """
+        tau_red = TC_B / T
+        r_mass = R_MOLAR_B / M_B
+        c_vib = r_mass * (-tau_red ** 2 * al0_tt - 2.5)
+        frac = c_vib / cp
+        gamma = cp / cv
+        rho_c2 = rho * w * w
+        tau11 = _vibrational_relaxation_time(T, rho)
+        zeta_vib = rho_c2 * (gamma - 1.0) * frac * (1.0 - frac) * tau11
+        t_xi = 6.0 * jnp.pi * mu * xi ** 3 / (_KB * T)
+        zeta_crit = _R_B * rho_c2 * t_xi
+        return zeta_vib, zeta_crit, tau11
+
+
+    def _bulk_viscosity_shared(T, rho, mu, w, cp, cv, al0_tt, xi):
+        """ζ [Pa·s] reusing quantities the fused (T, ρ) path already computed."""
+        zeta_vib, zeta_crit, _ = _bulk_viscosity_parts(T, rho, mu, w, cp, cv,
+                                                       al0_tt, xi)
+        return zeta_vib + zeta_crit
+
+
+    def _scalar_bulk_viscosity(T, rho):
+        """Bulk viscosity ζ [Pa·s] at scalar (T, ρ [kg/m³]).
+
+        The equilibrium c, c_p, c_v come from the thermo kernel in ``core``
+        (imported here, at trace time, since ``core`` imports this module).
+        """
+        from co2_eos import core as _core
+        _thermo = _core.for_eos(eos)._thermo
+        (_, cv, cp, w, *_), aux = _thermo(T, rho)
+        ar_d, ar_dd, _, _, a0_tt = aux
+        mu = _scalar_viscosity(T, rho)
+        xi, _ = _correlation_length_and_excess(T, rho, ar_d, ar_dd)
+        return _bulk_viscosity_shared(T, rho, mu, w, cp, cv, a0_tt, xi)
+
+
+    return SimpleNamespace(
+        eos=eos, _HAVE_CHI_CHEB=_HAVE_CHI_CHEB,
+        _scalar_viscosity=_scalar_viscosity,
+        _dpdrho_ref_reduced=_dpdrho_ref_reduced,
+        _correlation_length_and_excess=_correlation_length_and_excess,
+        _lambda_critical_formula=_lambda_critical_formula,
+        _lambda_critical_shared=_lambda_critical_shared,
+        _thermal_conductivity_shared=_thermal_conductivity_shared,
+        _scalar_thermal_conductivity=_scalar_thermal_conductivity,
+        _bulk_viscosity_parts=_bulk_viscosity_parts,
+        _bulk_viscosity_shared=_bulk_viscosity_shared,
+        _scalar_bulk_viscosity=_scalar_bulk_viscosity)
+
+
+_BUILT = {}
+
+
+def for_eos(eos):
+    """The EOS-coupled kernels of backend ``eos`` (built once, on request)."""
+    eos = _backends.get(eos).name
+    if eos not in _BUILT:
+        _BUILT[eos] = _build(eos)
+    return _BUILT[eos]
+
+
+# Every backend is built at import, outside any trace.
+for _eos in _backends.EOS_NAMES:
+    for_eos(_eos)
+_SW = for_eos(_backends.SPAN_WAGNER)
+_HAVE_CHI_CHEB = _SW._HAVE_CHI_CHEB
+_dpdrho_ref_reduced = _SW._dpdrho_ref_reduced
+_correlation_length_and_excess = _SW._correlation_length_and_excess
+_lambda_critical_formula = _SW._lambda_critical_formula
+_lambda_critical_shared = _SW._lambda_critical_shared
+_thermal_conductivity_shared = _SW._thermal_conductivity_shared
+_scalar_thermal_conductivity = _SW._scalar_thermal_conductivity
+_bulk_viscosity_parts = _SW._bulk_viscosity_parts
+_bulk_viscosity_shared = _SW._bulk_viscosity_shared
+_scalar_bulk_viscosity = _SW._scalar_bulk_viscosity
 
 
 # ═══════════════════════════════════════════════════════════════════════════

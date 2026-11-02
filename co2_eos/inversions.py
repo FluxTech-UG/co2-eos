@@ -14,22 +14,13 @@ Defines custom_jvp rules so that both forward-mode (jvp) and reverse-mode
 import jax
 import jax.numpy as jnp
 
-from co2_eos import span_wagner as sw
-from co2_eos import saturation as sat
+from types import SimpleNamespace
+
+from co2_eos import backends as _backends
+from co2_eos import saturation as _saturation
 
 # Enable float64
 jax.config.update("jax_enable_x64", True)
-
-# Eagerly load the saturation table at module-import time (outside any trace
-# context). If the table is loaded for the first time inside a JIT trace,
-# the arrays it materialises end up tagged as tracers, breaking reverse-mode
-# differentiation through density_from_PT. Loading it here pins them as
-# concrete constants. If the file is missing we tolerate it; the first
-# inversion call will surface a clear FileNotFoundError.
-try:
-    sat._ensure_loaded()
-except FileNotFoundError:
-    pass
 
 # Phase hint constants
 LIQUID = 0
@@ -41,715 +32,806 @@ MAX_ITER = 50
 TOL = 1e-10
 
 
-# ── Pressure and its density-derivative (scalar) ─────────────────────────
+def _build(eos):
+    """The inversions on backend ``eos``, returned as a namespace.
 
-_dP_drho = jax.grad(sw._scalar_pressure, argnums=1)
-_d2P_drho2 = jax.grad(jax.grad(sw._scalar_pressure, argnums=1), argnums=1)
-_dP_dT = jax.grad(sw._scalar_pressure, argnums=0)
-_dh_dT = jax.grad(sw._scalar_enthalpy, argnums=0)
-_dh_drho = jax.grad(sw._scalar_enthalpy, argnums=1)
-_du_dT = jax.grad(sw._scalar_internal_energy, argnums=0)
-_du_drho = jax.grad(sw._scalar_internal_energy, argnums=1)
-
-
-# ── Phase-aware initial guess ─────────────────────────────────────────────
-
-def _subcritical_branch(T, P):
-    """Which stable branch a (T, P) state below TC lies on, and its bracket.
-
-    Below TC the Span-Wagner isotherm is an analytic continuation through the
-    dome: it loops between the spinodals and can swing far above P_sat (at
-    294 K it reaches 12 MPa near 550 kg/m³), so P(T, ρ) = P_target has spurious
-    roots inside the dome for any P_target below that swing. The only way to
-    pick the physical root is by P against P_sat(T): P ≥ P_sat is compressed
-    liquid, ρ ≥ ρ_l(T); P < P_sat is vapor, ρ ≤ ρ_v(T). Returns
-    (liquid_side, rho_l_T, rho_v_T); the saturation table is used only where
-    T < TC, so its behaviour above TC does not matter here.
+    ``sw`` is the backend's surface (constants and scalar property functions)
+    and ``sat`` its saturation lookups; the body is the same code for every
+    backend.  Every backend is built at import, outside any trace, so each
+    saturation table is loaded as a concrete constant (a table first loaded
+    inside a JIT trace ends up tagged as a tracer, which breaks reverse-mode
+    differentiation through density_from_PT).  A missing table is tolerated
+    here (the table scripts import this package to build one); the first
+    inversion that needs it raises FileNotFoundError.
     """
-    rho_l_T, rho_v_T = sat.saturation_densities(T)
-    liquid_side = P >= sat.saturation_pressure(T)
-    return liquid_side, rho_l_T, rho_v_T
-
-
-def _initial_guess(T, P, phase_hint):
-    """Return an initial density guess based on phase_hint.
-
-    phase_hint: 0=liquid, 1=vapor, 2=supercritical/auto.
-    Uses jnp.where for JIT traceability.
-    """
-    subcritical_T = T < sw.TC
-    liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
-
-    # Liquid: saturation liquid density at T (good for compressed liquid),
-    # fall back to 2*RHOC for supercritical T
-    liquid_guess = jnp.where(subcritical_T, rho_l_T, 2.0 * sw.RHOC)
-    # Vapor: saturation vapor density at T, fall back to ideal gas
-    ideal_gas_rho = P / (sw.R * T)
-    vapor_guess = jnp.where(subcritical_T, rho_v_T, ideal_gas_rho)
-    # Auto, T >= TC: the isotherm is monotone, so any pressure-aware seed
-    # converges. Near PC and TC use RHOC; liquid-like (P > 1.5*PC) 2*RHOC;
-    # otherwise ideal gas.
-    near_critical = jnp.logical_and(
-        jnp.abs(P - sw.PC) < 0.2 * sw.PC,
-        jnp.abs(T - sw.TC) < 15.0,
-    )
-    sc_guess_above_TC = jnp.where(
-        near_critical, sw.RHOC,
-        jnp.where(P > 1.5 * sw.PC, 2.0 * sw.RHOC, ideal_gas_rho)
-    )
-    # Auto, T < TC: seed on the stable branch P_sat(T) selects. A seed inside
-    # the dome (RHOC, or the ideal-gas density) lands Halley on a spurious
-    # root of the isotherm's loop, with dP/dρ > 0 and no sign of trouble.
-    sc_guess_below_TC = jnp.where(liquid_side, rho_l_T, rho_v_T)
-    sc_guess = jnp.where(subcritical_T, sc_guess_below_TC, sc_guess_above_TC)
-
-    rho0 = jnp.where(
-        phase_hint == LIQUID, liquid_guess,
-        jnp.where(phase_hint == VAPOR, vapor_guess, sc_guess)
-    )
-    return rho0
-
-
-# ── Sign-preserving denominator guard ─────────────────────────────────────
-
-def _safe_denom(x, eps=1e-30):
-    """Guard a denominator: preserve sign for small values, fall back to +eps for NaN."""
-    return jnp.where(
-        jnp.isnan(x), eps,
-        jnp.where(jnp.abs(x) > eps, x, jnp.where(x >= 0, eps, -eps))
-    )
-
-
-# ── Halley solver via lax.while_loop ─────────────────────────────────────
-
-def _halley_body(state):
-    """One Halley step (Householder order 2) for cubic convergence.
-
-    ρ_{n+1} = ρ_n − 2·f·f' / (2·f'² − f·f'')
-    """
-    rho, T, P_target, i, converged = state
-    f = sw._scalar_pressure(T, rho) - P_target
-    fp = _dP_drho(T, rho)
-    fpp = _d2P_drho2(T, rho)
-    # Halley denominator: 2·f'² − f·f''
-    halley_denom = 2.0 * fp * fp - f * fpp
-    step = 2.0 * f * fp / _safe_denom(halley_denom)
-    # Step damping: |Δρ/ρ| ≤ 50% per iteration
-    step = jnp.clip(step, -0.5 * rho, 0.5 * rho)
-    rho_new = rho - step
-    # Clamp to stay positive
-    rho_new = jnp.maximum(rho_new, 1.0)
-    converged_new = jnp.logical_or(
-        jnp.abs(f) < TOL,
-        jnp.abs(step) < 1e-13 * jnp.maximum(jnp.abs(rho_new), 1.0)
-    )
-    return (rho_new, T, P_target, i + 1, converged_new)
-
-
-def _halley_cond(state):
-    """Continue while not converged and under max iterations."""
-    rho, T, P_target, i, converged = state
-    return jnp.logical_and(i < MAX_ITER, jnp.logical_not(converged))
-
-
-# ── Bisection fallback via lax.while_loop ────────────────────────────────
-
-_BISECT_LO = 1.0       # kg/m³, lower bound
-_BISECT_HI = 1200.0    # kg/m³, upper bound
-_BISECT_ITERS = 60      # ~10⁻¹⁸ relative precision
-_BRANCH_TOL = 1e-4      # relative slack around ρ_l(T), ρ_v(T) for the branch tests
-
-
-def _bisection_body(state):
-    """One bisection step on f(ρ) = P(T,ρ) − P_target.
-
-    Monotonicity assumption: P(T,ρ) is monotonically increasing in ρ on the
-    bracket. That holds on any single-phase stable branch (∂P/∂ρ > 0) and
-    fails inside the spinodal loop, so below TC the caller brackets the
-    stable branch (`_bisection_bracket`) instead of the whole [1, 1200] range.
-    """
-    lo, hi, T, P_target, i = state
-    mid = 0.5 * (lo + hi)
-    f_mid = sw._scalar_pressure(T, mid) - P_target
-    # P(T,ρ) is monotonically increasing in ρ for single-phase fluid,
-    # so f_mid > 0 means mid is too high.
-    lo_new = jnp.where(f_mid < 0.0, mid, lo)
-    hi_new = jnp.where(f_mid < 0.0, hi, mid)
-    return (lo_new, hi_new, T, P_target, i + 1)
-
-
-def _bisection_cond(state):
-    lo, hi, T, P_target, i = state
-    return jnp.logical_and(i < _BISECT_ITERS, (hi - lo) > 1e-14 * hi)
-
-
-def _bisection_bracket(T, P, phase_hint):
-    """Density bracket [lo, hi] on which P(T, ρ) is monotone for this state.
-
-    Above TC the whole range. Below TC the stable branch: [ρ_l(T), 1200] on
-    the liquid side, [1, ρ_v(T)] on the vapor side, the side taken from the
-    explicit hint or, under auto, from P against P_sat(T).
-    """
-    subcritical_T = T < sw.TC
-    liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
-    liquid_side = jnp.where(
-        phase_hint == LIQUID, True,
-        jnp.where(phase_hint == VAPOR, False, liquid_side)
-    )
-    # A slack of _BRANCH_TOL keeps the saturation point itself inside the
-    # bracket (the spline carries ~6e-8 relative error) while excluding the
-    # dome interior, whose roots sit tens of percent away.
-    lo = jnp.where(jnp.logical_and(subcritical_T, liquid_side),
-                   rho_l_T * (1.0 - _BRANCH_TOL), _BISECT_LO)
-    hi = jnp.where(jnp.logical_and(subcritical_T, jnp.logical_not(liquid_side)),
-                   rho_v_T * (1.0 + _BRANCH_TOL), _BISECT_HI)
-    return lo, hi
-
-
-def _bisection_solve(T, P, lo=_BISECT_LO, hi=_BISECT_HI):
-    """Bisection solve for ρ given (T, P) on [lo, hi]. Scalar inputs."""
-    init_state = (jnp.asarray(lo, dtype=jnp.float64), jnp.asarray(hi, dtype=jnp.float64),
-                  T, P, jnp.int32(0))
-    final_state = jax.lax.while_loop(_bisection_cond, _bisection_body, init_state)
-    lo, hi, _, _, _ = final_state
-    return 0.5 * (lo + hi)
-
-
-def _on_requested_branch(T, P, rho, phase_hint):
-    """Under the auto hint below TC, is the converged root on the stable branch?
-
-    A root inside the dome satisfies P(T, ρ) = P_target with ∂P/∂ρ > 0 and
-    passes every residual test, so the only check that catches it is its
-    position relative to the saturation densities. Explicit LIQUID/VAPOR hints
-    are the caller's assertion (a metastable request is legitimate) and are
-    not checked.
-    """
-    subcritical_T = T < sw.TC
-    liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
-    on_branch = jnp.where(liquid_side, rho >= rho_l_T * (1.0 - _BRANCH_TOL),
-                          rho <= rho_v_T * (1.0 + _BRANCH_TOL))
-    checked = jnp.logical_and(subcritical_T, phase_hint == SUPERCRITICAL)
-    return jnp.logical_or(jnp.logical_not(checked), on_branch)
-
-
-def _solve_density(T, P, phase_hint):
-    """Halley solve for ρ given (T, P, phase_hint), with bisection fallback. Scalar inputs.
-
-    A root on the wrong side of the dome under the auto hint is returned as
-    NaN, the package's failure signal, never as a number.
-    """
-    rho0 = _initial_guess(T, P, phase_hint)
-    init_state = (rho0, T, P, jnp.int32(0), jnp.bool_(False))
-    final_state = jax.lax.while_loop(_halley_cond, _halley_body, init_state)
-    rho_halley, _, _, _, converged = final_state
-
-    # Bisection safety net: only runs when Halley did not converge
-    def _bisect_branch(_):
-        lo, hi = _bisection_bracket(T, P, phase_hint)
-        rho_bisect = _bisection_solve(T, P, lo, hi)
-        bisect_residual = jnp.abs(sw._scalar_pressure(T, rho_bisect) - P)
-        bisect_ok = bisect_residual < 1e-3 * jnp.maximum(jnp.abs(P), 1.0)
-        return jnp.where(bisect_ok, rho_bisect, jnp.nan)
-
-    rho = jax.lax.cond(
-        converged,
-        lambda _: rho_halley,
-        _bisect_branch,
-        None,
-    )
-    return jnp.where(_on_requested_branch(T, P, rho, phase_hint), rho, jnp.nan)
-
-
-# ── Implicit differentiation via custom_jvp ───────────────────────────────
-
-@jax.custom_jvp
-def _density_from_PT(T, P, phase_hint):
-    """Find ρ such that P(T,ρ) = P_target. Scalar inputs.
-
-    Args:
-        T: Temperature [K] (scalar)
-        P: Pressure [Pa] (scalar)
-        phase_hint: 0=liquid, 1=vapor, 2=supercritical (integer scalar)
-
-    Returns:
-        rho: Density [kg/m³] (scalar)
-    """
-    return _solve_density(T, P, phase_hint)
-
-
-@_density_from_PT.defjvp
-def _density_from_PT_jvp(primals, tangents):
-    """JVP via implicit function theorem.
-
-    P(T, ρ) = P_target  →  (∂P/∂T)dT + (∂P/∂ρ)dρ = dP
-    ⇒  dρ = (dP − (∂P/∂T)·dT) / (∂P/∂ρ)
-    """
-    T, P, phase_hint = primals
-    dT, dP, _ = tangents
-
-    rho_star = _density_from_PT(T, P, phase_hint)
-
-    dP_drho_val = _dP_drho(T, rho_star)
-    dP_dT_val = _dP_dT(T, rho_star)
-
-    drho = (dP - dP_dT_val * dT) / _safe_denom(dP_drho_val)
-
-    return rho_star, drho
-
-
-# ── Public API ────────────────────────────────────────────────────────────
-
-@jax.jit
-def density_from_PT(T, P, phase_hint):
-    """Find ρ [kg/m³] such that P(T,ρ) = P_target.
-
-    All inputs broadcast: scalar or 1-D arrays of the same length.
-
-    Args:
-        T: Temperature [K]
-        P: Pressure [Pa]
-        phase_hint: 0=liquid, 1=vapor, 2=supercritical/auto
-
-    Returns:
-        rho: Density [kg/m³]
-    """
-    T = jnp.asarray(T, dtype=jnp.float64)
-    P = jnp.asarray(P, dtype=jnp.float64)
-    phase_hint = jnp.asarray(phase_hint, dtype=jnp.int32)
-    return jax.vmap(_density_from_PT)(T, P, phase_hint)
-
-
-# ═════════════════════════════════════════════════════════════════════════
-# 2D inversion state_from_Ph: find (T, ρ) given (P, h)
-# ═════════════════════════════════════════════════════════════════════════
-
-# ── Initial guess for (T, ρ) from (P, h) ──────────────────────────────
-
-def _initial_guess_Ph(P, h, phase_hint):
-    """Estimate (T, ρ) from (P, h) for the 2D Newton solver.
-
-    Strategy:
-    - Sub-critical P: use T_sat(P) as temperature estimate.
-      Compare h to saturation enthalpies to decide phase.
-    - Super-critical P: estimate T from ideal-gas enthalpy inversion
-      (h ≈ cp0 * T → T ≈ h / cp0), clamped to a reasonable range.
-    - Then call the 1D density solver to get ρ from (T_guess, P).
-    """
-    subcritical = P < sw.PC
-
-    # Sub-critical path: T_sat from saturation table
-    T_sat = sat.saturation_temperature(P)
-    h_l, h_v = sat.saturation_enthalpies(P)
-
-    # If h > h_v → superheated vapor, estimate T above T_sat
-    # If h < h_l → compressed liquid, use T_sat as starting point
-    # Otherwise → near saturation, use T_sat
-    T_sub = jnp.where(
-        h > h_v,
-        T_sat + (h - h_v) / (sw.R * 3.5),  # rough Cp estimate
-        jnp.where(h < h_l, T_sat - 1.0, T_sat)
-    )
-
-    # Super-critical path: anchor on pseudocritical temperature.
-    # Near Pc, the Clausius-Clapeyron slope dT/dP ≈ 0.028 K/kPa ≈ 28 K/MPa.
-    # This extrapolation gives T_pc ≈ Tc + (P - Pc) * slope, which tracks
-    # the Cp peak (Widom line) much better than an ideal-gas estimate.
-    dTdP_sat = 2.8e-5  # K/Pa, Clausius-Clapeyron slope near Tc
-    T_pseudo = sw.TC + (P - sw.PC) * dTdP_sat
-
-    # Ideal-gas fallback for pressures far above Pc where the pseudocritical
-    # extrapolation becomes less relevant
-    T_ideal = h / (sw.R * 5.0)
-
-    # Use pseudocritical anchor when P < 2*Pc (near-critical), else ideal-gas
-    T_super = jnp.where(P < 2.0 * sw.PC, T_pseudo, T_ideal)
-
-    # Pseudocritical-aware override: when P is close to PC and h is in the
-    # pseudocritical enthalpy band, start from TC.  The Widom-line Cp peak
-    # causes the Newton iteration to oscillate wildly if the initial T guess
-    # is on the wrong side; anchoring to TC lets the damped Newton converge.
-    h_crit = sw._scalar_enthalpy(sw.TC, sw.RHOC)  # enthalpy at critical point
-    near_pc = jnp.abs(P - sw.PC) < 0.5 * sw.PC
-    h_in_band = jnp.abs(h - h_crit) < 100.0e3  # ±100 kJ/kg
-    T_super = jnp.where(jnp.logical_and(near_pc, h_in_band), sw.TC, T_super)
-
-    # Compressed-liquid override: when P > PC but h is well below the
-    # critical-point enthalpy, the fluid is subcooled liquid.  Estimate T
-    # from a rough liquid Cp (~2500 J/kg/K) below TC rather than anchoring
-    # on the pseudocritical line which overshoots into the supercritical region.
-    Cp_liq = 2500.0  # J/(kg·K), rough subcooled CO₂ liquid heat capacity
-    T_liq_est = sw.TC - (h_crit - h) / Cp_liq
-    h_clearly_liquid = h < h_crit - 50.0e3  # h at least 50 kJ/kg below h_crit
-    T_super = jnp.where(h_clearly_liquid, T_liq_est, T_super)
-
-    T_super = jnp.clip(T_super, 250.0, 800.0)
-
-    T0 = jnp.where(subcritical, T_sub, T_super)
-    # Clamp T to physical range
-    T0 = jnp.clip(T0, sw.T_TRIPLE, 800.0)
-
-    rho0 = _solve_density(T0, P, phase_hint)
-    return T0, rho0
-
-
-# ── 2D Newton solver ──────────────────────────────────────────────────
-
-def _newton_body_2d(state):
-    """One 2D Newton step on F = [P(T,ρ) - P_target, h(T,ρ) - h_target]."""
-    T, rho, P_target, h_target, i, converged = state
-
-    # Residual
-    fP = sw._scalar_pressure(T, rho) - P_target
-    fh = sw._scalar_enthalpy(T, rho) - h_target
-
-    # Jacobian: J = [[dP/dT, dP/drho], [dh/dT, dh/drho]]
-    j00 = _dP_dT(T, rho)
-    j01 = _dP_drho(T, rho)
-    j10 = _dh_dT(T, rho)
-    j11 = _dh_drho(T, rho)
-
-    # Analytic 2×2 inverse: J^{-1} = (1/det) * [[j11, -j01], [-j10, j00]]
-    det = j00 * j11 - j01 * j10
-
-    dT = (j11 * fP - j01 * fh) / _safe_denom(det)
-    drho = (-j10 * fP + j00 * fh) / _safe_denom(det)
-
-    # Step damping: prevent overshooting across Cp peak near Widom line
-    dT = jnp.clip(dT, -20.0, 20.0)
-    drho = jnp.clip(drho, -0.5 * rho, 0.5 * rho)
-
-    T_new = T - dT
-    rho_new = rho - drho
-
-    # Clamp to physical bounds
-    T_new = jnp.maximum(T_new, sw.T_TRIPLE)
-    rho_new = jnp.maximum(rho_new, 1.0)
-
-    residual_small = jnp.maximum(jnp.abs(fP), jnp.abs(fh)) < TOL
-    step_small = jnp.logical_and(
-        jnp.abs(dT) < 1e-13 * jnp.maximum(jnp.abs(T_new), 1.0),
-        jnp.abs(drho) < 1e-13 * jnp.maximum(jnp.abs(rho_new), 1.0)
-    )
-    converged_new = jnp.logical_or(residual_small, step_small)
-    return (T_new, rho_new, P_target, h_target, i + 1, converged_new)
-
-
-def _newton_cond_2d(state):
-    """Continue while not converged and under max iterations."""
-    T, rho, P_target, h_target, i, converged = state
-    return jnp.logical_and(i < MAX_ITER, jnp.logical_not(converged))
-
-
-def _solve_state_Ph(P, h, phase_hint):
-    """2D Newton solve for (T, ρ) given (P, h, phase_hint). Scalar inputs."""
-    T0, rho0 = _initial_guess_Ph(P, h, phase_hint)
-    init_state = (T0, rho0, P, h, jnp.int32(0), jnp.bool_(False))
-    final_state = jax.lax.while_loop(_newton_cond_2d, _newton_body_2d, init_state)
-    T_out, rho_out, _, _, _, converged = final_state
-    return (jnp.where(converged, T_out, jnp.nan),
-            jnp.where(converged, rho_out, jnp.nan))
-
-
-# ── Implicit differentiation via custom_jvp ──────────────────────────
-
-@jax.custom_jvp
-def _state_from_Ph(P, h, phase_hint):
-    """Find (T, ρ) such that P(T,ρ) = P and h(T,ρ) = h. Scalar inputs.
-
-    For subcritical P where h falls inside the two-phase dome (h_l ≤ h ≤ h_v),
-    returns saturation-boundary properties instead of solving the single-phase
-    Newton: T = T_sat(P), ρ = ρ_l(P) or ρ_v(P) depending on phase_hint.
-
-    Args:
-        P: Pressure [Pa] (scalar)
-        h: Specific enthalpy [J/kg] (scalar)
-        phase_hint: 0=liquid, 1=vapor, 2=supercritical (integer scalar)
-
-    Returns:
-        (T, rho): Temperature [K] and density [kg/m³] (scalars)
-    """
-    # --- Dome detection ---
-    # Saturation lookups (always evaluated; JAX semantics)
-    T_sat = sat.saturation_temperature(P)
-    h_l, h_v = sat.saturation_enthalpies(P)
-    rho_l, rho_v = sat.saturation_densities_P(P)
-
-    in_dome = jnp.logical_and(P < sw.PC, jnp.logical_and(h >= h_l, h <= h_v))
-
-    # Dome-branch density: respect phase_hint
-    # LIQUID → ρ_l, VAPOR → ρ_v, SUPERCRITICAL → pick by enthalpy midpoint
-    h_mid = 0.5 * (h_l + h_v)
-    rho_dome = jnp.where(
-        phase_hint == LIQUID, rho_l,
-        jnp.where(phase_hint == VAPOR, rho_v,
-                  jnp.where(h < h_mid, rho_l, rho_v))
-    )
-
-    # --- Single-phase path (Newton solver, unchanged) ---
-    T_sp, rho_sp = _solve_state_Ph(P, h, phase_hint)
-
-    # Merge: dome wins when inside
-    T_out = jnp.where(in_dome, T_sat, T_sp)
-    rho_out = jnp.where(in_dome, rho_dome, rho_sp)
-    return T_out, rho_out
-
-
-@_state_from_Ph.defjvp
-def _state_from_Ph_jvp(primals, tangents):
-    """JVP via implicit function theorem on F(T,ρ; P,h) = 0.
-
-    Single-phase path:
-        F = [P(T,ρ) - P_target, h(T,ρ) - h_target]
-        J = [[∂P/∂T, ∂P/∂ρ], [∂h/∂T, ∂h/∂ρ]]
-        [dT, dρ] = J⁻¹ · [dP, dh]
-
-    Dome path:
-        T = T_sat(P), so dT = (dT_sat/dP)·dP, dT/dh = 0
-        ρ = ρ_branch(P), so dρ = (dρ_branch/dP)·dP, dρ/dh = 0
-    """
-    P, h, phase_hint = primals
-    dP, dh, _ = tangents
-
-    T_star, rho_star = _state_from_Ph(P, h, phase_hint)
-
-    # --- Dome detection (same logic as primal) ---
-    h_l, h_v = sat.saturation_enthalpies(P)
-    in_dome = jnp.logical_and(P < sw.PC, jnp.logical_and(h >= h_l, h <= h_v))
-
-    # --- Dome tangents via autodiff through saturation splines ---
-    dTsat_dP = jax.grad(sat.saturation_temperature)(P)
-
-    # Differentiate the selected density branch w.r.t. P
-    def _rho_dome_of_P(P_):
-        rho_l_, rho_v_ = sat.saturation_densities_P(P_)
-        h_l_, h_v_ = sat.saturation_enthalpies(P_)
-        h_mid_ = 0.5 * (h_l_ + h_v_)
-        return jnp.where(
-            phase_hint == LIQUID, rho_l_,
-            jnp.where(phase_hint == VAPOR, rho_v_,
-                      jnp.where(h < h_mid_, rho_l_, rho_v_))
+    sw = _backends.get(eos).surface
+    sat = _saturation.for_eos(eos)
+    try:
+        sat._ensure_loaded()
+    except FileNotFoundError:
+        pass
+
+    # ── Pressure and its density-derivative (scalar) ─────────────────────────
+
+    _dP_drho = jax.grad(sw._scalar_pressure, argnums=1)
+    _d2P_drho2 = jax.grad(jax.grad(sw._scalar_pressure, argnums=1), argnums=1)
+    _dP_dT = jax.grad(sw._scalar_pressure, argnums=0)
+    _dh_dT = jax.grad(sw._scalar_enthalpy, argnums=0)
+    _dh_drho = jax.grad(sw._scalar_enthalpy, argnums=1)
+    _du_dT = jax.grad(sw._scalar_internal_energy, argnums=0)
+    _du_drho = jax.grad(sw._scalar_internal_energy, argnums=1)
+
+
+    # ── Phase-aware initial guess ─────────────────────────────────────────────
+
+    def _subcritical_branch(T, P):
+        """Which stable branch a (T, P) state below TC lies on, and its bracket.
+
+        Below TC the Span-Wagner isotherm is an analytic continuation through the
+        dome: it loops between the spinodals and can swing far above P_sat (at
+        294 K it reaches 12 MPa near 550 kg/m³), so P(T, ρ) = P_target has spurious
+        roots inside the dome for any P_target below that swing. The only way to
+        pick the physical root is by P against P_sat(T): P ≥ P_sat is compressed
+        liquid, ρ ≥ ρ_l(T); P < P_sat is vapor, ρ ≤ ρ_v(T). Returns
+        (liquid_side, rho_l_T, rho_v_T); the saturation table is used only where
+        T < TC, so its behaviour above TC does not matter here.
+        """
+        rho_l_T, rho_v_T = sat.saturation_densities(T)
+        liquid_side = P >= sat.saturation_pressure(T)
+        return liquid_side, rho_l_T, rho_v_T
+
+
+    def _initial_guess(T, P, phase_hint):
+        """Return an initial density guess based on phase_hint.
+
+        phase_hint: 0=liquid, 1=vapor, 2=supercritical/auto.
+        Uses jnp.where for JIT traceability.
+        """
+        subcritical_T = T < sw.TC
+        liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
+
+        # Liquid: saturation liquid density at T (good for compressed liquid),
+        # fall back to 2*RHOC for supercritical T
+        liquid_guess = jnp.where(subcritical_T, rho_l_T, 2.0 * sw.RHOC)
+        # Vapor: saturation vapor density at T, fall back to ideal gas
+        ideal_gas_rho = P / (sw.R * T)
+        vapor_guess = jnp.where(subcritical_T, rho_v_T, ideal_gas_rho)
+        # Auto, T >= TC: the isotherm is monotone, so any pressure-aware seed
+        # converges. Near PC and TC use RHOC; liquid-like (P > 1.5*PC) 2*RHOC;
+        # otherwise ideal gas.
+        near_critical = jnp.logical_and(
+            jnp.abs(P - sw.PC) < 0.2 * sw.PC,
+            jnp.abs(T - sw.TC) < 15.0,
         )
-    drhodome_dP = jax.grad(_rho_dome_of_P)(P)
+        sc_guess_above_TC = jnp.where(
+            near_critical, sw.RHOC,
+            jnp.where(P > 1.5 * sw.PC, 2.0 * sw.RHOC, ideal_gas_rho)
+        )
+        # Auto, T < TC: seed on the stable branch P_sat(T) selects. A seed inside
+        # the dome (RHOC, or the ideal-gas density) lands Halley on a spurious
+        # root of the isotherm's loop, with dP/dρ > 0 and no sign of trouble.
+        sc_guess_below_TC = jnp.where(liquid_side, rho_l_T, rho_v_T)
+        sc_guess = jnp.where(subcritical_T, sc_guess_below_TC, sc_guess_above_TC)
 
-    dT_dome = dTsat_dP * dP
-    drho_dome = drhodome_dP * dP
-
-    # --- Single-phase tangents (implicit function theorem) ---
-    j00 = _dP_dT(T_star, rho_star)
-    j01 = _dP_drho(T_star, rho_star)
-    j10 = _dh_dT(T_star, rho_star)
-    j11 = _dh_drho(T_star, rho_star)
-
-    det = j00 * j11 - j01 * j10
-    det_safe = _safe_denom(det)
-
-    # J⁻¹ = (1/det) * [[j11, -j01], [-j10, j00]]
-    dT_sp = (j11 * dP - j01 * dh) / det_safe
-    drho_sp = (-j10 * dP + j00 * dh) / det_safe
-
-    # Merge tangents
-    dT = jnp.where(in_dome, dT_dome, dT_sp)
-    drho = jnp.where(in_dome, drho_dome, drho_sp)
-
-    return (T_star, rho_star), (dT, drho)
+        rho0 = jnp.where(
+            phase_hint == LIQUID, liquid_guess,
+            jnp.where(phase_hint == VAPOR, vapor_guess, sc_guess)
+        )
+        return rho0
 
 
-# ── Public API ────────────────────────────────────────────────────────
+    # ── Sign-preserving denominator guard ─────────────────────────────────────
 
-@jax.jit
-def state_from_Ph(P, h, phase_hint):
-    """Find (T [K], ρ [kg/m³]) such that P(T,ρ) = P and h(T,ρ) = h.
-
-    All inputs broadcast: scalar or 1-D arrays of the same length.
-
-    Args:
-        P: Pressure [Pa]
-        h: Specific enthalpy [J/kg]
-        phase_hint: 0=liquid, 1=vapor, 2=supercritical/auto
-
-    Returns:
-        (T, rho): Temperature [K] and density [kg/m³]
-    """
-    P = jnp.asarray(P, dtype=jnp.float64)
-    h = jnp.asarray(h, dtype=jnp.float64)
-    phase_hint = jnp.asarray(phase_hint, dtype=jnp.int32)
-    return jax.vmap(_state_from_Ph)(P, h, phase_hint)
+    def _safe_denom(x, eps=1e-30):
+        """Guard a denominator: preserve sign for small values, fall back to +eps for NaN."""
+        return jnp.where(
+            jnp.isnan(x), eps,
+            jnp.where(jnp.abs(x) > eps, x, jnp.where(x >= 0, eps, -eps))
+        )
 
 
-# ═════════════════════════════════════════════════════════════════════════
-# 1D inversion temperature_from_Du: find T given (ρ, u)
-# ═════════════════════════════════════════════════════════════════════════
+    # ── Halley solver via lax.while_loop ─────────────────────────────────────
 
-# ── Initial guess for T from (ρ, u) ──────────────────────────────────
+    def _halley_body(state):
+        """One Halley step (Householder order 2) for cubic convergence.
 
-def _initial_guess_Du(rho, u):
-    """Estimate T from (ρ, u) using u ≈ Cv_approx * R * T.
-
-    Cv_approx ~ 3.5 is a rough dimensionless heat capacity for CO₂.
-    """
-    T0 = u / (3.5 * sw.R)
-    return jnp.clip(T0, sw.T_TRIPLE, 800.0)
-
-
-# ── 1D Newton solver for T(ρ, u) ─────────────────────────────────────
-
-def _newton_body_Du(state):
-    """One Newton step: T_{n+1} = T_n - f(T)/f'(T) where f = u(T,ρ) - u_target."""
-    T, rho, u_target, i, converged = state
-    f = sw._scalar_internal_energy(T, rho) - u_target
-    fp = _du_dT(T, rho)  # = Cv > 0
-    step = f / _safe_denom(fp)
-    T_new = T - step
-    T_new = jnp.clip(T_new, sw.T_TRIPLE, 800.0)
-    converged_new = jnp.logical_or(
-        jnp.abs(f) < TOL,
-        jnp.abs(step) < 1e-13 * jnp.maximum(jnp.abs(T_new), 1.0)
-    )
-    return (T_new, rho, u_target, i + 1, converged_new)
+        ρ_{n+1} = ρ_n − 2·f·f' / (2·f'² − f·f'')
+        """
+        rho, T, P_target, i, converged = state
+        f = sw._scalar_pressure(T, rho) - P_target
+        fp = _dP_drho(T, rho)
+        fpp = _d2P_drho2(T, rho)
+        # Halley denominator: 2·f'² − f·f''
+        halley_denom = 2.0 * fp * fp - f * fpp
+        step = 2.0 * f * fp / _safe_denom(halley_denom)
+        # Step damping: |Δρ/ρ| ≤ 50% per iteration
+        step = jnp.clip(step, -0.5 * rho, 0.5 * rho)
+        rho_new = rho - step
+        # Clamp to stay positive
+        rho_new = jnp.maximum(rho_new, 1.0)
+        converged_new = jnp.logical_or(
+            jnp.abs(f) < TOL,
+            jnp.abs(step) < 1e-13 * jnp.maximum(jnp.abs(rho_new), 1.0)
+        )
+        return (rho_new, T, P_target, i + 1, converged_new)
 
 
-def _newton_cond_Du(state):
-    """Continue while not converged and under max iterations."""
-    T, rho, u_target, i, converged = state
-    return jnp.logical_and(i < MAX_ITER, jnp.logical_not(converged))
+    def _halley_cond(state):
+        """Continue while not converged and under max iterations."""
+        rho, T, P_target, i, converged = state
+        return jnp.logical_and(i < MAX_ITER, jnp.logical_not(converged))
 
 
-def _solve_temperature_Du(rho, u, phase_hint):
-    """Newton solve for T given (ρ, u, phase_hint). Scalar inputs."""
-    T0 = _initial_guess_Du(rho, u)
-    init_state = (T0, rho, u, jnp.int32(0), jnp.bool_(False))
-    final_state = jax.lax.while_loop(_newton_cond_Du, _newton_body_Du, init_state)
-    T_out, _, _, _, converged = final_state
-    return jnp.where(converged, T_out, jnp.nan)
+    # ── Bisection fallback via lax.while_loop ────────────────────────────────
+
+    _BISECT_LO = 1.0       # kg/m³, lower bound
+    _BISECT_HI = 1200.0    # kg/m³, upper bound
+    _BISECT_ITERS = 60      # ~10⁻¹⁸ relative precision
+    _BRANCH_TOL = 1e-4      # relative slack around ρ_l(T), ρ_v(T) for the branch tests
 
 
-# ── Implicit differentiation via custom_jvp ──────────────────────────
+    def _bisection_body(state):
+        """One bisection step on f(ρ) = P(T,ρ) − P_target.
 
-@jax.custom_jvp
-def _temperature_from_Du(rho, u, phase_hint):
-    """Find T such that u(T, ρ) = u_target at fixed ρ. Scalar inputs.
-
-    Args:
-        rho: Density [kg/m³] (scalar)
-        u: Specific internal energy [J/kg] (scalar)
-        phase_hint: 0=liquid, 1=vapor, 2=supercritical (integer scalar)
-
-    Returns:
-        T: Temperature [K] (scalar)
-    """
-    return _solve_temperature_Du(rho, u, phase_hint)
-
-
-@_temperature_from_Du.defjvp
-def _temperature_from_Du_jvp(primals, tangents):
-    """JVP via implicit function theorem.
-
-    u(T, ρ) = u_target  →  (∂u/∂T)dT + (∂u/∂ρ)dρ = du
-    ⇒  dT = (du − (∂u/∂ρ)·dρ) / (∂u/∂T)
-    """
-    rho, u, phase_hint = primals
-    drho, du, _ = tangents
-
-    T_star = _temperature_from_Du(rho, u, phase_hint)
-
-    du_dT_val = _du_dT(T_star, rho)     # = Cv
-    du_drho_val = _du_drho(T_star, rho)
-
-    dT = (du - du_drho_val * drho) / _safe_denom(du_dT_val)
-
-    return T_star, dT
+        Monotonicity assumption: P(T,ρ) is monotonically increasing in ρ on the
+        bracket. That holds on any single-phase stable branch (∂P/∂ρ > 0) and
+        fails inside the spinodal loop, so below TC the caller brackets the
+        stable branch (`_bisection_bracket`) instead of the whole [1, 1200] range.
+        """
+        lo, hi, T, P_target, i = state
+        mid = 0.5 * (lo + hi)
+        f_mid = sw._scalar_pressure(T, mid) - P_target
+        # P(T,ρ) is monotonically increasing in ρ for single-phase fluid,
+        # so f_mid > 0 means mid is too high.
+        lo_new = jnp.where(f_mid < 0.0, mid, lo)
+        hi_new = jnp.where(f_mid < 0.0, hi, mid)
+        return (lo_new, hi_new, T, P_target, i + 1)
 
 
-# ── Public API ────────────────────────────────────────────────────────
-
-@jax.jit
-def temperature_from_Du(rho, u, phase_hint):
-    """Find T [K] such that u(T, ρ) = u_target at fixed ρ.
-
-    All inputs broadcast: scalar or 1-D arrays of the same length.
-
-    Args:
-        rho: Density [kg/m³]
-        u: Specific internal energy [J/kg]
-        phase_hint: 0=liquid, 1=vapor, 2=supercritical/auto
-
-    Returns:
-        T: Temperature [K]
-    """
-    rho = jnp.asarray(rho, dtype=jnp.float64)
-    u = jnp.asarray(u, dtype=jnp.float64)
-    phase_hint = jnp.asarray(phase_hint, dtype=jnp.int32)
-    return jax.vmap(_temperature_from_Du)(rho, u, phase_hint)
+    def _bisection_cond(state):
+        lo, hi, T, P_target, i = state
+        return jnp.logical_and(i < _BISECT_ITERS, (hi - lo) > 1e-14 * hi)
 
 
-# ── Convenience wrapper: state_from_Du ────────────────────────────────
+    def _bisection_bracket(T, P, phase_hint):
+        """Density bracket [lo, hi] on which P(T, ρ) is monotone for this state.
 
-@jax.custom_jvp
-def _state_from_Du(rho, u, phase_hint):
-    """Find (T, P, h) given (ρ, u). Scalar inputs.
-
-    Solves for T via 1D Newton, then forward-evaluates P and h.
-
-    Args:
-        rho: Density [kg/m³] (scalar)
-        u: Specific internal energy [J/kg] (scalar)
-        phase_hint: 0=liquid, 1=vapor, 2=supercritical (integer scalar)
-
-    Returns:
-        (T, P, h): Temperature [K], Pressure [Pa], Enthalpy [J/kg]
-    """
-    T = _solve_temperature_Du(rho, u, phase_hint)
-    P = sw._scalar_pressure(T, rho)
-    h = sw._scalar_enthalpy(T, rho)
-    return T, P, h
-
-
-@_state_from_Du.defjvp
-def _state_from_Du_jvp(primals, tangents):
-    """JVP via implicit differentiation + chain rule.
-
-    The implicit solve gives T*(ρ, u):
-        dT = (du − (∂u/∂ρ)·dρ) / (∂u/∂T)
-
-    Then chain rule for P and h:
-        dP = (∂P/∂T)·dT + (∂P/∂ρ)·dρ
-        dh = (∂h/∂T)·dT + (∂h/∂ρ)·dρ
-    """
-    rho, u, phase_hint = primals
-    drho, du, _ = tangents
-
-    T_star, P_star, h_star = _state_from_Du(rho, u, phase_hint)
-
-    # IFT for T*: u(T,ρ) = u_target
-    Cv = _du_dT(T_star, rho)
-    du_drho_val = _du_drho(T_star, rho)
-    dT = (du - du_drho_val * drho) / _safe_denom(Cv)
-
-    # Chain rule for P and h
-    dP = _dP_dT(T_star, rho) * dT + _dP_drho(T_star, rho) * drho
-    dh = _dh_dT(T_star, rho) * dT + _dh_drho(T_star, rho) * drho
-
-    return (T_star, P_star, h_star), (dT, dP, dh)
+        Above TC the whole range. Below TC the stable branch: [ρ_l(T), 1200] on
+        the liquid side, [1, ρ_v(T)] on the vapor side, the side taken from the
+        explicit hint or, under auto, from P against P_sat(T).
+        """
+        subcritical_T = T < sw.TC
+        liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
+        liquid_side = jnp.where(
+            phase_hint == LIQUID, True,
+            jnp.where(phase_hint == VAPOR, False, liquid_side)
+        )
+        # A slack of _BRANCH_TOL keeps the saturation point itself inside the
+        # bracket (the spline carries ~6e-8 relative error) while excluding the
+        # dome interior, whose roots sit tens of percent away.
+        lo = jnp.where(jnp.logical_and(subcritical_T, liquid_side),
+                       rho_l_T * (1.0 - _BRANCH_TOL), _BISECT_LO)
+        hi = jnp.where(jnp.logical_and(subcritical_T, jnp.logical_not(liquid_side)),
+                       rho_v_T * (1.0 + _BRANCH_TOL), _BISECT_HI)
+        return lo, hi
 
 
-@jax.jit
-def state_from_Du(rho, u, phase_hint):
-    """Find (T [K], P [Pa], h [J/kg]) given (ρ, u) at fixed density.
+    def _bisection_solve(T, P, lo=_BISECT_LO, hi=_BISECT_HI):
+        """Bisection solve for ρ given (T, P) on [lo, hi]. Scalar inputs."""
+        init_state = (jnp.asarray(lo, dtype=jnp.float64), jnp.asarray(hi, dtype=jnp.float64),
+                      T, P, jnp.int32(0))
+        final_state = jax.lax.while_loop(_bisection_cond, _bisection_body, init_state)
+        lo, hi, _, _, _ = final_state
+        return 0.5 * (lo + hi)
 
-    Solves for T via 1D Newton on u(T,ρ) = u_target, then forward-evaluates
-    pressure and enthalpy.
 
-    All inputs broadcast: scalar or 1-D arrays of the same length.
+    def _on_requested_branch(T, P, rho, phase_hint):
+        """Under the auto hint below TC, is the converged root on the stable branch?
 
-    Args:
-        rho: Density [kg/m³]
-        u: Specific internal energy [J/kg]
-        phase_hint: 0=liquid, 1=vapor, 2=supercritical/auto
+        A root inside the dome satisfies P(T, ρ) = P_target with ∂P/∂ρ > 0 and
+        passes every residual test, so the only check that catches it is its
+        position relative to the saturation densities. Explicit LIQUID/VAPOR hints
+        are the caller's assertion (a metastable request is legitimate) and are
+        not checked.
+        """
+        subcritical_T = T < sw.TC
+        liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
+        on_branch = jnp.where(liquid_side, rho >= rho_l_T * (1.0 - _BRANCH_TOL),
+                              rho <= rho_v_T * (1.0 + _BRANCH_TOL))
+        checked = jnp.logical_and(subcritical_T, phase_hint == SUPERCRITICAL)
+        return jnp.logical_or(jnp.logical_not(checked), on_branch)
 
-    Returns:
-        (T, P, h): Temperature [K], Pressure [Pa], Enthalpy [J/kg]
-    """
-    rho = jnp.asarray(rho, dtype=jnp.float64)
-    u = jnp.asarray(u, dtype=jnp.float64)
-    phase_hint = jnp.asarray(phase_hint, dtype=jnp.int32)
-    return jax.vmap(_state_from_Du)(rho, u, phase_hint)
+
+    def _solve_density(T, P, phase_hint):
+        """Halley solve for ρ given (T, P, phase_hint), with bisection fallback. Scalar inputs.
+
+        A root on the wrong side of the dome under the auto hint is returned as
+        NaN, the package's failure signal, never as a number.
+        """
+        rho0 = _initial_guess(T, P, phase_hint)
+        init_state = (rho0, T, P, jnp.int32(0), jnp.bool_(False))
+        final_state = jax.lax.while_loop(_halley_cond, _halley_body, init_state)
+        rho_halley, _, _, _, converged = final_state
+
+        # Bisection safety net: only runs when Halley did not converge
+        def _bisect_branch(_):
+            lo, hi = _bisection_bracket(T, P, phase_hint)
+            rho_bisect = _bisection_solve(T, P, lo, hi)
+            bisect_residual = jnp.abs(sw._scalar_pressure(T, rho_bisect) - P)
+            bisect_ok = bisect_residual < 1e-3 * jnp.maximum(jnp.abs(P), 1.0)
+            return jnp.where(bisect_ok, rho_bisect, jnp.nan)
+
+        rho = jax.lax.cond(
+            converged,
+            lambda _: rho_halley,
+            _bisect_branch,
+            None,
+        )
+        return jnp.where(_on_requested_branch(T, P, rho, phase_hint), rho, jnp.nan)
+
+
+    # ── Implicit differentiation via custom_jvp ───────────────────────────────
+
+    @jax.custom_jvp
+    def _density_from_PT(T, P, phase_hint):
+        """Find ρ such that P(T,ρ) = P_target. Scalar inputs.
+
+        Args:
+            T: Temperature [K] (scalar)
+            P: Pressure [Pa] (scalar)
+            phase_hint: 0=liquid, 1=vapor, 2=supercritical (integer scalar)
+
+        Returns:
+            rho: Density [kg/m³] (scalar)
+        """
+        return _solve_density(T, P, phase_hint)
+
+
+    @_density_from_PT.defjvp
+    def _density_from_PT_jvp(primals, tangents):
+        """JVP via implicit function theorem.
+
+        P(T, ρ) = P_target  →  (∂P/∂T)dT + (∂P/∂ρ)dρ = dP
+        ⇒  dρ = (dP − (∂P/∂T)·dT) / (∂P/∂ρ)
+        """
+        T, P, phase_hint = primals
+        dT, dP, _ = tangents
+
+        rho_star = _density_from_PT(T, P, phase_hint)
+
+        dP_drho_val = _dP_drho(T, rho_star)
+        dP_dT_val = _dP_dT(T, rho_star)
+
+        drho = (dP - dP_dT_val * dT) / _safe_denom(dP_drho_val)
+
+        return rho_star, drho
+
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    @jax.jit
+    def density_from_PT(T, P, phase_hint):
+        """Find ρ [kg/m³] such that P(T,ρ) = P_target.
+
+        All inputs broadcast: scalar or 1-D arrays of the same length.
+
+        Args:
+            T: Temperature [K]
+            P: Pressure [Pa]
+            phase_hint: 0=liquid, 1=vapor, 2=supercritical/auto
+
+        Returns:
+            rho: Density [kg/m³]
+        """
+        T = jnp.asarray(T, dtype=jnp.float64)
+        P = jnp.asarray(P, dtype=jnp.float64)
+        phase_hint = jnp.asarray(phase_hint, dtype=jnp.int32)
+        return jax.vmap(_density_from_PT)(T, P, phase_hint)
+
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # 2D inversion state_from_Ph: find (T, ρ) given (P, h)
+    # ═════════════════════════════════════════════════════════════════════════
+
+    # ── Initial guess for (T, ρ) from (P, h) ──────────────────────────────
+
+    def _initial_guess_Ph(P, h, phase_hint):
+        """Estimate (T, ρ) from (P, h) for the 2D Newton solver.
+
+        Strategy:
+        - Sub-critical P: use T_sat(P) as temperature estimate.
+          Compare h to saturation enthalpies to decide phase.
+        - Super-critical P: estimate T from ideal-gas enthalpy inversion
+          (h ≈ cp0 * T → T ≈ h / cp0), clamped to a reasonable range.
+        - Then call the 1D density solver to get ρ from (T_guess, P).
+        """
+        subcritical = P < sw.PC
+
+        # Sub-critical path: T_sat from saturation table
+        T_sat = sat.saturation_temperature(P)
+        h_l, h_v = sat.saturation_enthalpies(P)
+
+        # If h > h_v → superheated vapor, estimate T above T_sat
+        # If h < h_l → compressed liquid, use T_sat as starting point
+        # Otherwise → near saturation, use T_sat
+        T_sub = jnp.where(
+            h > h_v,
+            T_sat + (h - h_v) / (sw.R * 3.5),  # rough Cp estimate
+            jnp.where(h < h_l, T_sat - 1.0, T_sat)
+        )
+
+        # Super-critical path: anchor on pseudocritical temperature.
+        # Near Pc, the Clausius-Clapeyron slope dT/dP ≈ 0.028 K/kPa ≈ 28 K/MPa.
+        # This extrapolation gives T_pc ≈ Tc + (P - Pc) * slope, which tracks
+        # the Cp peak (Widom line) much better than an ideal-gas estimate.
+        dTdP_sat = 2.8e-5  # K/Pa, Clausius-Clapeyron slope near Tc
+        T_pseudo = sw.TC + (P - sw.PC) * dTdP_sat
+
+        # Ideal-gas fallback for pressures far above Pc where the pseudocritical
+        # extrapolation becomes less relevant
+        T_ideal = h / (sw.R * 5.0)
+
+        # Use pseudocritical anchor when P < 2*Pc (near-critical), else ideal-gas
+        T_super = jnp.where(P < 2.0 * sw.PC, T_pseudo, T_ideal)
+
+        # Pseudocritical-aware override: when P is close to PC and h is in the
+        # pseudocritical enthalpy band, start from TC.  The Widom-line Cp peak
+        # causes the Newton iteration to oscillate wildly if the initial T guess
+        # is on the wrong side; anchoring to TC lets the damped Newton converge.
+        h_crit = sw._scalar_enthalpy(sw.TC, sw.RHOC)  # enthalpy at critical point
+        near_pc = jnp.abs(P - sw.PC) < 0.5 * sw.PC
+        h_in_band = jnp.abs(h - h_crit) < 100.0e3  # ±100 kJ/kg
+        T_super = jnp.where(jnp.logical_and(near_pc, h_in_band), sw.TC, T_super)
+
+        # Compressed-liquid override: when P > PC but h is well below the
+        # critical-point enthalpy, the fluid is subcooled liquid.  Estimate T
+        # from a rough liquid Cp (~2500 J/kg/K) below TC rather than anchoring
+        # on the pseudocritical line which overshoots into the supercritical region.
+        Cp_liq = 2500.0  # J/(kg·K), rough subcooled CO₂ liquid heat capacity
+        T_liq_est = sw.TC - (h_crit - h) / Cp_liq
+        h_clearly_liquid = h < h_crit - 50.0e3  # h at least 50 kJ/kg below h_crit
+        T_super = jnp.where(h_clearly_liquid, T_liq_est, T_super)
+
+        T_super = jnp.clip(T_super, 250.0, 800.0)
+
+        T0 = jnp.where(subcritical, T_sub, T_super)
+        # Clamp T to physical range
+        T0 = jnp.clip(T0, sw.T_TRIPLE, 800.0)
+
+        rho0 = _solve_density(T0, P, phase_hint)
+        return T0, rho0
+
+
+    # ── 2D Newton solver ──────────────────────────────────────────────────
+
+    def _newton_body_2d(state):
+        """One 2D Newton step on F = [P(T,ρ) - P_target, h(T,ρ) - h_target]."""
+        T, rho, P_target, h_target, i, converged = state
+
+        # Residual
+        fP = sw._scalar_pressure(T, rho) - P_target
+        fh = sw._scalar_enthalpy(T, rho) - h_target
+
+        # Jacobian: J = [[dP/dT, dP/drho], [dh/dT, dh/drho]]
+        j00 = _dP_dT(T, rho)
+        j01 = _dP_drho(T, rho)
+        j10 = _dh_dT(T, rho)
+        j11 = _dh_drho(T, rho)
+
+        # Analytic 2×2 inverse: J^{-1} = (1/det) * [[j11, -j01], [-j10, j00]]
+        det = j00 * j11 - j01 * j10
+
+        dT = (j11 * fP - j01 * fh) / _safe_denom(det)
+        drho = (-j10 * fP + j00 * fh) / _safe_denom(det)
+
+        # Step damping: prevent overshooting across Cp peak near Widom line
+        dT = jnp.clip(dT, -20.0, 20.0)
+        drho = jnp.clip(drho, -0.5 * rho, 0.5 * rho)
+
+        T_new = T - dT
+        rho_new = rho - drho
+
+        # Clamp to physical bounds
+        T_new = jnp.maximum(T_new, sw.T_TRIPLE)
+        rho_new = jnp.maximum(rho_new, 1.0)
+
+        residual_small = jnp.maximum(jnp.abs(fP), jnp.abs(fh)) < TOL
+        step_small = jnp.logical_and(
+            jnp.abs(dT) < 1e-13 * jnp.maximum(jnp.abs(T_new), 1.0),
+            jnp.abs(drho) < 1e-13 * jnp.maximum(jnp.abs(rho_new), 1.0)
+        )
+        converged_new = jnp.logical_or(residual_small, step_small)
+        return (T_new, rho_new, P_target, h_target, i + 1, converged_new)
+
+
+    def _newton_cond_2d(state):
+        """Continue while not converged and under max iterations."""
+        T, rho, P_target, h_target, i, converged = state
+        return jnp.logical_and(i < MAX_ITER, jnp.logical_not(converged))
+
+
+    def _solve_state_Ph(P, h, phase_hint):
+        """2D Newton solve for (T, ρ) given (P, h, phase_hint). Scalar inputs."""
+        T0, rho0 = _initial_guess_Ph(P, h, phase_hint)
+        init_state = (T0, rho0, P, h, jnp.int32(0), jnp.bool_(False))
+        final_state = jax.lax.while_loop(_newton_cond_2d, _newton_body_2d, init_state)
+        T_out, rho_out, _, _, _, converged = final_state
+        return (jnp.where(converged, T_out, jnp.nan),
+                jnp.where(converged, rho_out, jnp.nan))
+
+
+    # ── Implicit differentiation via custom_jvp ──────────────────────────
+
+    @jax.custom_jvp
+    def _state_from_Ph(P, h, phase_hint):
+        """Find (T, ρ) such that P(T,ρ) = P and h(T,ρ) = h. Scalar inputs.
+
+        For subcritical P where h falls inside the two-phase dome (h_l ≤ h ≤ h_v),
+        returns saturation-boundary properties instead of solving the single-phase
+        Newton: T = T_sat(P), ρ = ρ_l(P) or ρ_v(P) depending on phase_hint.
+
+        Args:
+            P: Pressure [Pa] (scalar)
+            h: Specific enthalpy [J/kg] (scalar)
+            phase_hint: 0=liquid, 1=vapor, 2=supercritical (integer scalar)
+
+        Returns:
+            (T, rho): Temperature [K] and density [kg/m³] (scalars)
+        """
+        # --- Dome detection ---
+        # Saturation lookups (always evaluated; JAX semantics)
+        T_sat = sat.saturation_temperature(P)
+        h_l, h_v = sat.saturation_enthalpies(P)
+        rho_l, rho_v = sat.saturation_densities_P(P)
+
+        in_dome = jnp.logical_and(P < sw.PC, jnp.logical_and(h >= h_l, h <= h_v))
+
+        # Dome-branch density: respect phase_hint
+        # LIQUID → ρ_l, VAPOR → ρ_v, SUPERCRITICAL → pick by enthalpy midpoint
+        h_mid = 0.5 * (h_l + h_v)
+        rho_dome = jnp.where(
+            phase_hint == LIQUID, rho_l,
+            jnp.where(phase_hint == VAPOR, rho_v,
+                      jnp.where(h < h_mid, rho_l, rho_v))
+        )
+
+        # --- Single-phase path (Newton solver, unchanged) ---
+        T_sp, rho_sp = _solve_state_Ph(P, h, phase_hint)
+
+        # Merge: dome wins when inside
+        T_out = jnp.where(in_dome, T_sat, T_sp)
+        rho_out = jnp.where(in_dome, rho_dome, rho_sp)
+        return T_out, rho_out
+
+
+    @_state_from_Ph.defjvp
+    def _state_from_Ph_jvp(primals, tangents):
+        """JVP via implicit function theorem on F(T,ρ; P,h) = 0.
+
+        Single-phase path:
+            F = [P(T,ρ) - P_target, h(T,ρ) - h_target]
+            J = [[∂P/∂T, ∂P/∂ρ], [∂h/∂T, ∂h/∂ρ]]
+            [dT, dρ] = J⁻¹ · [dP, dh]
+
+        Dome path:
+            T = T_sat(P), so dT = (dT_sat/dP)·dP, dT/dh = 0
+            ρ = ρ_branch(P), so dρ = (dρ_branch/dP)·dP, dρ/dh = 0
+        """
+        P, h, phase_hint = primals
+        dP, dh, _ = tangents
+
+        T_star, rho_star = _state_from_Ph(P, h, phase_hint)
+
+        # --- Dome detection (same logic as primal) ---
+        h_l, h_v = sat.saturation_enthalpies(P)
+        in_dome = jnp.logical_and(P < sw.PC, jnp.logical_and(h >= h_l, h <= h_v))
+
+        # --- Dome tangents via autodiff through saturation splines ---
+        dTsat_dP = jax.grad(sat.saturation_temperature)(P)
+
+        # Differentiate the selected density branch w.r.t. P
+        def _rho_dome_of_P(P_):
+            rho_l_, rho_v_ = sat.saturation_densities_P(P_)
+            h_l_, h_v_ = sat.saturation_enthalpies(P_)
+            h_mid_ = 0.5 * (h_l_ + h_v_)
+            return jnp.where(
+                phase_hint == LIQUID, rho_l_,
+                jnp.where(phase_hint == VAPOR, rho_v_,
+                          jnp.where(h < h_mid_, rho_l_, rho_v_))
+            )
+        drhodome_dP = jax.grad(_rho_dome_of_P)(P)
+
+        dT_dome = dTsat_dP * dP
+        drho_dome = drhodome_dP * dP
+
+        # --- Single-phase tangents (implicit function theorem) ---
+        j00 = _dP_dT(T_star, rho_star)
+        j01 = _dP_drho(T_star, rho_star)
+        j10 = _dh_dT(T_star, rho_star)
+        j11 = _dh_drho(T_star, rho_star)
+
+        det = j00 * j11 - j01 * j10
+        det_safe = _safe_denom(det)
+
+        # J⁻¹ = (1/det) * [[j11, -j01], [-j10, j00]]
+        dT_sp = (j11 * dP - j01 * dh) / det_safe
+        drho_sp = (-j10 * dP + j00 * dh) / det_safe
+
+        # Merge tangents
+        dT = jnp.where(in_dome, dT_dome, dT_sp)
+        drho = jnp.where(in_dome, drho_dome, drho_sp)
+
+        return (T_star, rho_star), (dT, drho)
+
+
+    # ── Public API ────────────────────────────────────────────────────────
+
+    @jax.jit
+    def state_from_Ph(P, h, phase_hint):
+        """Find (T [K], ρ [kg/m³]) such that P(T,ρ) = P and h(T,ρ) = h.
+
+        All inputs broadcast: scalar or 1-D arrays of the same length.
+
+        Args:
+            P: Pressure [Pa]
+            h: Specific enthalpy [J/kg]
+            phase_hint: 0=liquid, 1=vapor, 2=supercritical/auto
+
+        Returns:
+            (T, rho): Temperature [K] and density [kg/m³]
+        """
+        P = jnp.asarray(P, dtype=jnp.float64)
+        h = jnp.asarray(h, dtype=jnp.float64)
+        phase_hint = jnp.asarray(phase_hint, dtype=jnp.int32)
+        return jax.vmap(_state_from_Ph)(P, h, phase_hint)
+
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # 1D inversion temperature_from_Du: find T given (ρ, u)
+    # ═════════════════════════════════════════════════════════════════════════
+
+    # ── Initial guess for T from (ρ, u) ──────────────────────────────────
+
+    def _initial_guess_Du(rho, u):
+        """Estimate T from (ρ, u) using u ≈ Cv_approx * R * T.
+
+        Cv_approx ~ 3.5 is a rough dimensionless heat capacity for CO₂.
+        """
+        T0 = u / (3.5 * sw.R)
+        return jnp.clip(T0, sw.T_TRIPLE, 800.0)
+
+
+    # ── 1D Newton solver for T(ρ, u) ─────────────────────────────────────
+
+    def _newton_body_Du(state):
+        """One Newton step: T_{n+1} = T_n - f(T)/f'(T) where f = u(T,ρ) - u_target."""
+        T, rho, u_target, i, converged = state
+        f = sw._scalar_internal_energy(T, rho) - u_target
+        fp = _du_dT(T, rho)  # = Cv > 0
+        step = f / _safe_denom(fp)
+        T_new = T - step
+        T_new = jnp.clip(T_new, sw.T_TRIPLE, 800.0)
+        converged_new = jnp.logical_or(
+            jnp.abs(f) < TOL,
+            jnp.abs(step) < 1e-13 * jnp.maximum(jnp.abs(T_new), 1.0)
+        )
+        return (T_new, rho, u_target, i + 1, converged_new)
+
+
+    def _newton_cond_Du(state):
+        """Continue while not converged and under max iterations."""
+        T, rho, u_target, i, converged = state
+        return jnp.logical_and(i < MAX_ITER, jnp.logical_not(converged))
+
+
+    def _solve_temperature_Du(rho, u, phase_hint):
+        """Newton solve for T given (ρ, u, phase_hint). Scalar inputs."""
+        T0 = _initial_guess_Du(rho, u)
+        init_state = (T0, rho, u, jnp.int32(0), jnp.bool_(False))
+        final_state = jax.lax.while_loop(_newton_cond_Du, _newton_body_Du, init_state)
+        T_out, _, _, _, converged = final_state
+        return jnp.where(converged, T_out, jnp.nan)
+
+
+    # ── Implicit differentiation via custom_jvp ──────────────────────────
+
+    @jax.custom_jvp
+    def _temperature_from_Du(rho, u, phase_hint):
+        """Find T such that u(T, ρ) = u_target at fixed ρ. Scalar inputs.
+
+        Args:
+            rho: Density [kg/m³] (scalar)
+            u: Specific internal energy [J/kg] (scalar)
+            phase_hint: 0=liquid, 1=vapor, 2=supercritical (integer scalar)
+
+        Returns:
+            T: Temperature [K] (scalar)
+        """
+        return _solve_temperature_Du(rho, u, phase_hint)
+
+
+    @_temperature_from_Du.defjvp
+    def _temperature_from_Du_jvp(primals, tangents):
+        """JVP via implicit function theorem.
+
+        u(T, ρ) = u_target  →  (∂u/∂T)dT + (∂u/∂ρ)dρ = du
+        ⇒  dT = (du − (∂u/∂ρ)·dρ) / (∂u/∂T)
+        """
+        rho, u, phase_hint = primals
+        drho, du, _ = tangents
+
+        T_star = _temperature_from_Du(rho, u, phase_hint)
+
+        du_dT_val = _du_dT(T_star, rho)     # = Cv
+        du_drho_val = _du_drho(T_star, rho)
+
+        dT = (du - du_drho_val * drho) / _safe_denom(du_dT_val)
+
+        return T_star, dT
+
+
+    # ── Public API ────────────────────────────────────────────────────────
+
+    @jax.jit
+    def temperature_from_Du(rho, u, phase_hint):
+        """Find T [K] such that u(T, ρ) = u_target at fixed ρ.
+
+        All inputs broadcast: scalar or 1-D arrays of the same length.
+
+        Args:
+            rho: Density [kg/m³]
+            u: Specific internal energy [J/kg]
+            phase_hint: 0=liquid, 1=vapor, 2=supercritical/auto
+
+        Returns:
+            T: Temperature [K]
+        """
+        rho = jnp.asarray(rho, dtype=jnp.float64)
+        u = jnp.asarray(u, dtype=jnp.float64)
+        phase_hint = jnp.asarray(phase_hint, dtype=jnp.int32)
+        return jax.vmap(_temperature_from_Du)(rho, u, phase_hint)
+
+
+    # ── Convenience wrapper: state_from_Du ────────────────────────────────
+
+    @jax.custom_jvp
+    def _state_from_Du(rho, u, phase_hint):
+        """Find (T, P, h) given (ρ, u). Scalar inputs.
+
+        Solves for T via 1D Newton, then forward-evaluates P and h.
+
+        Args:
+            rho: Density [kg/m³] (scalar)
+            u: Specific internal energy [J/kg] (scalar)
+            phase_hint: 0=liquid, 1=vapor, 2=supercritical (integer scalar)
+
+        Returns:
+            (T, P, h): Temperature [K], Pressure [Pa], Enthalpy [J/kg]
+        """
+        T = _solve_temperature_Du(rho, u, phase_hint)
+        P = sw._scalar_pressure(T, rho)
+        h = sw._scalar_enthalpy(T, rho)
+        return T, P, h
+
+
+    @_state_from_Du.defjvp
+    def _state_from_Du_jvp(primals, tangents):
+        """JVP via implicit differentiation + chain rule.
+
+        The implicit solve gives T*(ρ, u):
+            dT = (du − (∂u/∂ρ)·dρ) / (∂u/∂T)
+
+        Then chain rule for P and h:
+            dP = (∂P/∂T)·dT + (∂P/∂ρ)·dρ
+            dh = (∂h/∂T)·dT + (∂h/∂ρ)·dρ
+        """
+        rho, u, phase_hint = primals
+        drho, du, _ = tangents
+
+        T_star, P_star, h_star = _state_from_Du(rho, u, phase_hint)
+
+        # IFT for T*: u(T,ρ) = u_target
+        Cv = _du_dT(T_star, rho)
+        du_drho_val = _du_drho(T_star, rho)
+        dT = (du - du_drho_val * drho) / _safe_denom(Cv)
+
+        # Chain rule for P and h
+        dP = _dP_dT(T_star, rho) * dT + _dP_drho(T_star, rho) * drho
+        dh = _dh_dT(T_star, rho) * dT + _dh_drho(T_star, rho) * drho
+
+        return (T_star, P_star, h_star), (dT, dP, dh)
+
+
+    @jax.jit
+    def state_from_Du(rho, u, phase_hint):
+        """Find (T [K], P [Pa], h [J/kg]) given (ρ, u) at fixed density.
+
+        Solves for T via 1D Newton on u(T,ρ) = u_target, then forward-evaluates
+        pressure and enthalpy.
+
+        All inputs broadcast: scalar or 1-D arrays of the same length.
+
+        Args:
+            rho: Density [kg/m³]
+            u: Specific internal energy [J/kg]
+            phase_hint: 0=liquid, 1=vapor, 2=supercritical/auto
+
+        Returns:
+            (T, P, h): Temperature [K], Pressure [Pa], Enthalpy [J/kg]
+        """
+        rho = jnp.asarray(rho, dtype=jnp.float64)
+        u = jnp.asarray(u, dtype=jnp.float64)
+        phase_hint = jnp.asarray(phase_hint, dtype=jnp.int32)
+        return jax.vmap(_state_from_Du)(rho, u, phase_hint)
+
+    return SimpleNamespace(
+        eos=eos,
+        _dP_drho=_dP_drho, _d2P_drho2=_d2P_drho2, _dP_dT=_dP_dT, _dh_dT=_dh_dT,
+        _dh_drho=_dh_drho, _du_dT=_du_dT, _du_drho=_du_drho,
+        _subcritical_branch=_subcritical_branch, _initial_guess=_initial_guess,
+        _safe_denom=_safe_denom, _halley_body=_halley_body,
+        _halley_cond=_halley_cond, _bisection_body=_bisection_body,
+        _bisection_cond=_bisection_cond, _bisection_bracket=_bisection_bracket,
+        _bisection_solve=_bisection_solve,
+        _on_requested_branch=_on_requested_branch,
+        _solve_density=_solve_density, _density_from_PT=_density_from_PT,
+        density_from_PT=density_from_PT, _initial_guess_Ph=_initial_guess_Ph,
+        _newton_body_2d=_newton_body_2d, _newton_cond_2d=_newton_cond_2d,
+        _solve_state_Ph=_solve_state_Ph, _state_from_Ph=_state_from_Ph,
+        state_from_Ph=state_from_Ph, _initial_guess_Du=_initial_guess_Du,
+        _newton_body_Du=_newton_body_Du, _newton_cond_Du=_newton_cond_Du,
+        _solve_temperature_Du=_solve_temperature_Du,
+        _temperature_from_Du=_temperature_from_Du,
+        temperature_from_Du=temperature_from_Du, _state_from_Du=_state_from_Du,
+        state_from_Du=state_from_Du, _BISECT_HI=_BISECT_HI,
+        _BISECT_ITERS=_BISECT_ITERS, _BISECT_LO=_BISECT_LO,
+        _BRANCH_TOL=_BRANCH_TOL)
+
+
+_BUILT = {eos: _build(eos) for eos in _backends.EOS_NAMES}
+
+
+def for_eos(eos):
+    """The inversions of backend ``eos``."""
+    return _BUILT[_backends.get(eos).name]
+
+
+_SW = _BUILT[_backends.SPAN_WAGNER]
+_dP_drho = _SW._dP_drho
+_d2P_drho2 = _SW._d2P_drho2
+_dP_dT = _SW._dP_dT
+_dh_dT = _SW._dh_dT
+_dh_drho = _SW._dh_drho
+_du_dT = _SW._du_dT
+_du_drho = _SW._du_drho
+_subcritical_branch = _SW._subcritical_branch
+_initial_guess = _SW._initial_guess
+_safe_denom = _SW._safe_denom
+_halley_body = _SW._halley_body
+_halley_cond = _SW._halley_cond
+_bisection_body = _SW._bisection_body
+_bisection_cond = _SW._bisection_cond
+_bisection_bracket = _SW._bisection_bracket
+_bisection_solve = _SW._bisection_solve
+_on_requested_branch = _SW._on_requested_branch
+_solve_density = _SW._solve_density
+_density_from_PT = _SW._density_from_PT
+density_from_PT = _SW.density_from_PT
+_initial_guess_Ph = _SW._initial_guess_Ph
+_newton_body_2d = _SW._newton_body_2d
+_newton_cond_2d = _SW._newton_cond_2d
+_solve_state_Ph = _SW._solve_state_Ph
+_state_from_Ph = _SW._state_from_Ph
+state_from_Ph = _SW.state_from_Ph
+_initial_guess_Du = _SW._initial_guess_Du
+_newton_body_Du = _SW._newton_body_Du
+_newton_cond_Du = _SW._newton_cond_Du
+_solve_temperature_Du = _SW._solve_temperature_Du
+_temperature_from_Du = _SW._temperature_from_Du
+temperature_from_Du = _SW.temperature_from_Du
+_state_from_Du = _SW._state_from_Du
+state_from_Du = _SW.state_from_Du
+_BISECT_HI = _SW._BISECT_HI
+_BISECT_ITERS = _SW._BISECT_ITERS
+_BISECT_LO = _SW._BISECT_LO
+_BRANCH_TOL = _SW._BRANCH_TOL
