@@ -219,7 +219,7 @@ def fit_and_save(T_grid, P_sat, rho_l, rho_v, h_l, h_v, s_l, s_v):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--eos", default=backends.DEFAULT_EOS,
-                    choices=backends.EOS_NAMES)
+                    choices=backends.CO2_EOS_NAMES)
     eos = ap.parse_args().eos
     _configure(eos)
     print(f"Generating CO2 saturation table from the {eos} EOS...")

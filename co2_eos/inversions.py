@@ -44,6 +44,8 @@ def _build(eos):
     here (the table scripts import this package to build one); the first
     inversion that needs it raises FileNotFoundError.
     """
+    if not _backends.get(eos).has_dome:
+        return _backends.get(eos).kernel.inversions
     sw = _backends.get(eos).surface
     sat = _saturation.for_eos(eos)
     try:

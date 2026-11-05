@@ -74,7 +74,7 @@ def main():
     global core, sat, TC
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--eos", default=backends.DEFAULT_EOS,
-                    choices=backends.EOS_NAMES)
+                    choices=backends.CO2_EOS_NAMES)
     eos = ap.parse_args().eos
     core = _core_mod.for_eos(eos)
     sat = _sat_mod.for_eos(eos)

@@ -68,10 +68,13 @@ def _build(eos):
     by it unchanged.
     """
     _b = _backends.get(eos)
-    TC, RHOC, R, T_TRIPLE = (_b.surface.TC, _b.surface.RHOC, _b.surface.R,
-                             _b.surface.T_TRIPLE)
+    TC, RHOC, R = _b.surface.TC, _b.surface.RHOC, _b.surface.R
     hz = _b.kernel
     _tr = _transport.for_eos(eos)
+    # A reference gas seeds and bounds its own Newton and guards its domain;
+    # these are static choices, so the CO₂ kernels hold no trace of them.
+    _reference_gas = not _b.has_dome
+    _T_LO, _T_HI = hz.T_CLIP if _reference_gas else (_b.surface.T_TRIPLE, _T_MAX)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # (ρ, u) → T₀ seed table  (bilinear; convergence accelerator only)
@@ -86,7 +89,7 @@ def _build(eos):
     _AFFINE_A, _AFFINE_B = 255.6, 1.656e-4
 
     _HAVE_SEED = False
-    _T_MIN = T_TRIPLE
+    _T_MIN = _T_LO
     try:
         _seed = np.load(_SEED_PATH)
         # Stored float32 (seed-only precision; halves the embedded-constant
@@ -118,8 +121,10 @@ def _build(eos):
         the query clamped to the table box; outside it the Newton polish still
         owns the accuracy, the seed is only a starting point.
         """
+        if _reference_gas:
+            return hz.seed_T(rho, u)
         if not _HAVE_SEED:
-            return jnp.clip(_AFFINE_A + _AFFINE_B * u, _T_MIN, _T_MAX)
+            return jnp.clip(_AFFINE_A + _AFFINE_B * u, _T_MIN, _T_HI)
         fi = jnp.clip((rho - _SEED_R_LO) / _SEED_R_STEP, 0.0,
                       _SEED_NRHO - 1 - 1e-9)
         fj = jnp.clip((u - _SEED_U_LO) / _SEED_U_STEP, 0.0, _SEED_NU - 1 - 1e-9)
@@ -208,7 +213,10 @@ def _build(eos):
         delta = rho / RHOC
         dstate = hz.residual_tau_prep(delta)
         T = _seed_T(rho, u)
-        iters = _NEWTON_ITERS_TABLE[eos] if _HAVE_SEED else _NEWTON_ITERS_AFFINE
+        if _reference_gas:
+            iters = hz.NEWTON_ITERS
+        else:
+            iters = _NEWTON_ITERS_TABLE[eos] if _HAVE_SEED else _NEWTON_ITERS_AFFINE
 
         for _ in range(iters):
             tau = TC / T
@@ -217,8 +225,8 @@ def _build(eos):
             f = R * TC * (a0_t + ar_t) - u
             cv = -R * tau ** 2 * (a0_tt + ar_tt)
             cv = jnp.where(jnp.abs(cv) > 1e-30, cv, 1e-30)
-            T = jnp.clip(T - f / cv, _T_MIN, _T_MAX)
-        return T
+            T = jnp.clip(T - f / cv, _T_MIN, _T_HI)
+        return hz.in_domain(T) if _reference_gas else T
 
 
     # ── Implicit differentiation via custom_jvp ─────────────────────────────────
@@ -283,7 +291,7 @@ def _build(eos):
             *jax.lax.optimization_barrier((T, rho, ar_d, ar_dd)))
         zeta_vib, zeta_crit, _ = _tr._bulk_viscosity_parts(T, rho, mu, w, cp, cv,
                                                            a0_tt, xi)
-        return {
+        state = {
             "temperature": T,
             "density": rho,
             "pressure": P,
@@ -301,6 +309,10 @@ def _build(eos):
             "bulk_viscosity": zeta_vib + zeta_crit,
             "bulk_viscosity_vibrational": zeta_vib,
         }
+        if _reference_gas:
+            outside = hz.domain_sentinel(T, P)
+            return {key: value + outside for key, value in state.items()}
+        return state
 
 
     def _state_from_rho_u(rho, u, phase_hint):
@@ -315,7 +327,7 @@ def _build(eos):
         return st
 
     return SimpleNamespace(
-        eos=eos, _HAVE_SEED=_HAVE_SEED, _T_MIN=_T_MIN, _T_MAX=_T_MAX,
+        eos=eos, _HAVE_SEED=_HAVE_SEED, _T_MIN=_T_MIN, _T_MAX=_T_HI,
         _seed_T=_seed_T, _thermo=_thermo, _u_and_cv=_u_and_cv,
         _solve_T=_solve_T, _temperature_from_Du=_temperature_from_Du,
         _state_from_T_rho=_state_from_T_rho,

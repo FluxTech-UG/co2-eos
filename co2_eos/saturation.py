@@ -37,6 +37,10 @@ def _ensure_loaded(eos=DEFAULT_EOS):
     """Load the backend's saturation table on first use. Call outside JIT."""
     if eos in _TABLES:
         return
+    if not _backends.get(eos).has_dome:
+        raise ValueError(
+            f"eos {eos!r} is a reference gas: it has no saturation curve; "
+            f"the saturation lookups serve {_backends.CO2_EOS_NAMES}")
     data = np.load(_backends.table_path(eos, "saturation_table"))
     _TABLES[eos] = {k: jnp.array(data[k]) for k in data}
 

@@ -164,32 +164,37 @@ _Validation harness: the fast (ρ, u) path vs an independent reference chain._
 
 ### co2_eos/__init__.py
 _CO2-EOS: Differentiable CO₂ thermodynamic properties in JAX._
-- const LIQUID  ·L84
-- const VAPOR  ·L85
-- const SUPERCRITICAL  ·L86
-- const AUTO  ·L87
-- @_jit viscosity(T, rho, eos=DEFAULT_EOS)  ·L114: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
-- @_jit thermal_conductivity(T, rho, eos=DEFAULT_EOS)  ·L126: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
-- @_jit bulk_viscosity(T, rho, eos=DEFAULT_EOS)  ·L134: Bulk viscosity ζ [Pa·s] at scalar (T, ρ). vmap for batches.
-- @_jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L152: Full thermodynamic + transport state from (ρ, u). Batched.
-- @_jit properties_from_rho_T(rho, T, eos=DEFAULT_EOS)  ·L182: Full thermodynamic + transport state from (ρ, T). Batched.
-- @_jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L211: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
-- @_jit properties(T, rho, eos=DEFAULT_EOS)  ·L231: Full thermodynamic + transport state at scalar (T, ρ).
-- @_jit state_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L242: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
-- @_jit density_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L257: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
-- @_jit state_from_Ph(P, h, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L266: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
-- @_jit state_from_Du(rho, u, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L282: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
+- const LIQUID  ·L94
+- const VAPOR  ·L95
+- const SUPERCRITICAL  ·L96
+- const AUTO  ·L97
+- @_jit viscosity(T, rho, eos=DEFAULT_EOS)  ·L126: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
+- @_jit thermal_conductivity(T, rho, eos=DEFAULT_EOS)  ·L138: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
+- @_jit bulk_viscosity(T, rho, eos=DEFAULT_EOS)  ·L146: Bulk viscosity ζ [Pa·s] at scalar (T, ρ). vmap for batches.
+- @_jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L164: Full thermodynamic + transport state from (ρ, u). Batched.
+- @_jit properties_from_rho_T(rho, T, eos=DEFAULT_EOS)  ·L194: Full thermodynamic + transport state from (ρ, T). Batched.
+- @_jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L223: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
+- @_jit properties(T, rho, eos=DEFAULT_EOS)  ·L243: Full thermodynamic + transport state at scalar (T, ρ).
+- @_jit state_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L254: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
+- @_jit density_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L269: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
+- @_jit state_from_Ph(P, h, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L278: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
+- @_jit state_from_Du(rho, u, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L294: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
 
 ### co2_eos/backends.py
 _The equation-of-state backends and the static switch that selects one._
-- const SPAN_WAGNER  ·L30
-- const NIST2026  ·L31
-- const EOS_NAMES  ·L32
-- const DEFAULT_EOS  ·L33
-- const DATA_DIR  ·L35
-- const _BACKENDS  ·L37
-- get(eos)  ·L45: The backend record for ``eos``; raises on an unknown name.
-- table_path(eos, stem)  ·L54: Path of the backend's table ``<stem><suffix>.npz`` in ``co2_eos/data``.
+- const SPAN_WAGNER  ·L39
+- const NIST2026  ·L40
+- const AIR  ·L41
+- const HELIUM  ·L42
+- const ARGON  ·L43
+- const CO2_EOS_NAMES  ·L44
+- const REFERENCE_GAS_NAMES  ·L45
+- const EOS_NAMES  ·L46
+- const DEFAULT_EOS  ·L47
+- const DATA_DIR  ·L49
+- const _BACKENDS  ·L51
+- get(eos)  ·L63: The backend record for ``eos``; raises on an unknown name.
+- table_path(eos, stem)  ·L72: Path of the backend's table ``<stem><suffix>.npz`` in ``co2_eos/data``.
 
 ### co2_eos/core.py
 _Redesigned high-performance EOS core: analytic derivatives, fused passes._
@@ -197,11 +202,11 @@ _Redesigned high-performance EOS core: analytic derivatives, fused passes._
 - const _NEWTON_ITERS_AFFINE  ·L55
 - const _T_MAX  ·L56
 - _build(eos)  ·L61: The fused kernels on backend ``eos``; returns them as a namespace.
-- const _BUILT  ·L325
-- for_eos(eos)  ·L328: The kernels of backend ``eos`` (built once, at first request).
-- const _SW  ·L339
-- const _HAVE_SEED  ·L340
-- const _T_MIN  ·L341
+- const _BUILT  ·L337
+- for_eos(eos)  ·L340: The kernels of backend ``eos`` (built once, at first request).
+- const _SW  ·L351
+- const _HAVE_SEED  ·L352
+- const _T_MIN  ·L353
 
 ### co2_eos/helmholtz.py
 _Span-Wagner (1996) reduced Helmholtz energy with hand-coded analytic_
@@ -249,13 +254,13 @@ _Thermodynamic inversions: pure JAX, JIT-compilable, vmappable,_
 - const MAX_ITER  ·L31
 - const TOL  ·L32
 - _build(eos)  ·L35: The inversions on backend ``eos``, returned as a namespace.
-- const _BUILT  ·L791
-- for_eos(eos)  ·L794: The inversions of backend ``eos``.
-- const _SW  ·L799
-- const _BISECT_HI  ·L834
-- const _BISECT_ITERS  ·L835
-- const _BISECT_LO  ·L836
-- const _BRANCH_TOL  ·L837
+- const _BUILT  ·L793
+- for_eos(eos)  ·L796: The inversions of backend ``eos``.
+- const _SW  ·L801
+- const _BISECT_HI  ·L836
+- const _BISECT_ITERS  ·L837
+- const _BISECT_LO  ·L838
+- const _BRANCH_TOL  ·L839
 
 ### co2_eos/nist2026.py
 _NIST IR 8608 (2026) equation of state for CO₂: pure JAX, analytic derivatives._
@@ -346,22 +351,45 @@ _Constants of the NIST IR 8608 equation of state for CO₂: the single source._
 - const AUX_RHOV_T  ·L135
 - const AUX_RHO_TOL  ·L136
 
+### co2_eos/reference_gases.py
+_The reference gases (air, helium, argon): one closed-form Helmholtz energy each._
+- const _NEWTON_ITERS_T  ·L52
+- const _NEWTON_ITERS_RHO  ·L53
+- const _NEWTON_ITERS_PH  ·L54
+- const _SEED_T  ·L55
+- const _NEWTON_T_CLIP  ·L56
+- const _EDGE_SLACK  ·L57
+- _delta_series(terms)  ·L60: Coefficients of δ¹ and δ² in Σ n δ^d τ^t exp(−δ^l), aligned on the distinct t.
+- _make_transport(gas, RHOC, TC, in_domain)  ·L82: Transport namespace of a gas: μ(T, ρ) and λ(T, ρ) from its published fits.
+- _make(gas)  ·L172: The surface, kernel, transport and inversions of one gas, as one namespace.
+- const GASES  ·L410
+
+### co2_eos/reference_gases_data.py
+_Coefficients of the reference gases: the one home of every number, cited._
+- const P_REF  ·L53
+- const _AIR  ·L56
+- const _ARGON  ·L103
+- const HELIUM_DILUTE_TABLE  ·L158
+- const HELIUM_FIT_T0  ·L178
+- const _HELIUM  ·L180
+- const GASES  ·L218
+
 ### co2_eos/saturation.py
 _CO2 saturation curve lookups: pure JAX, JIT-compilable._
 - const _TABLES  ·L33
 - _ensure_loaded(eos=DEFAULT_EOS)  ·L36: Load the backend's saturation table on first use. Call outside JIT.
-- _table(eos)  ·L44
-- _eval_spline(x, breaks, coeffs)  ·L51: Evaluate cubic spline at x.
-- saturation_pressure(T, eos=DEFAULT_EOS)  ·L75: Saturation pressure P_sat [Pa] at temperature T [K].
-- saturation_densities(T, eos=DEFAULT_EOS)  ·L85: Saturated liquid and vapor densities [kg/m3] at temperature T [K].
-- saturation_enthalpies_T(T, eos=DEFAULT_EOS)  ·L97: Saturated liquid and vapor enthalpies [J/kg] at temperature T [K].
-- saturation_entropies(T, eos=DEFAULT_EOS)  ·L109: Saturated liquid and vapor entropies [J/(kg*K)] at temperature T [K].
-- saturation_temperature(P, eos=DEFAULT_EOS)  ·L123: Saturation temperature T_sat [K] at pressure P [Pa].
-- saturation_enthalpies(P, eos=DEFAULT_EOS)  ·L132: Saturated liquid and vapor enthalpies [J/kg] at pressure P [Pa].
-- saturation_densities_P(P, eos=DEFAULT_EOS)  ·L144: Saturated liquid and vapor densities [kg/m3] at pressure P [Pa].
-- saturation_entropies_P(P, eos=DEFAULT_EOS)  ·L156: Saturated liquid and vapor entropies [J/(kg*K)] at pressure P [Pa].
-- const _LOOKUPS  ·L168
-- for_eos(eos)  ·L174: The lookups bound to backend ``eos``, under their module names.
+- _table(eos)  ·L48
+- _eval_spline(x, breaks, coeffs)  ·L55: Evaluate cubic spline at x.
+- saturation_pressure(T, eos=DEFAULT_EOS)  ·L79: Saturation pressure P_sat [Pa] at temperature T [K].
+- saturation_densities(T, eos=DEFAULT_EOS)  ·L89: Saturated liquid and vapor densities [kg/m3] at temperature T [K].
+- saturation_enthalpies_T(T, eos=DEFAULT_EOS)  ·L101: Saturated liquid and vapor enthalpies [J/kg] at temperature T [K].
+- saturation_entropies(T, eos=DEFAULT_EOS)  ·L113: Saturated liquid and vapor entropies [J/(kg*K)] at temperature T [K].
+- saturation_temperature(P, eos=DEFAULT_EOS)  ·L127: Saturation temperature T_sat [K] at pressure P [Pa].
+- saturation_enthalpies(P, eos=DEFAULT_EOS)  ·L136: Saturated liquid and vapor enthalpies [J/kg] at pressure P [Pa].
+- saturation_densities_P(P, eos=DEFAULT_EOS)  ·L148: Saturated liquid and vapor densities [kg/m3] at pressure P [Pa].
+- saturation_entropies_P(P, eos=DEFAULT_EOS)  ·L160: Saturated liquid and vapor entropies [J/(kg*K)] at pressure P [Pa].
+- const _LOOKUPS  ·L172
+- for_eos(eos)  ·L178: The lookups bound to backend ``eos``, under their module names.
 
 ### co2_eos/span_wagner.py
 _Span-Wagner (1996) equation of state for CO₂: pure JAX implementation._
@@ -476,13 +504,13 @@ _CO₂ transport property correlations: pure JAX implementation._
 - const _R_B  ·L238
 - _vibrational_relaxation_time(T, rho)  ·L241: Isothermal vibrational relaxation time τ₁₁ [s] at scalar (T, ρ).
 - _build(eos)  ·L281: The EOS-coupled transport kernels on backend ``eos``, as a namespace.
-- const _BUILT  ·L524
-- for_eos(eos)  ·L527: The EOS-coupled kernels of backend ``eos`` (built once, on request).
-- const _SW  ·L538
-- const _HAVE_CHI_CHEB  ·L539
-- @jax.jit viscosity(T, rho)  ·L556: Dynamic viscosity μ [Pa·s]. Batched over leading axis.
-- @jax.jit thermal_conductivity(T, rho)  ·L570: Thermal conductivity λ [W/(m·K)]. Batched over leading axis.
-- @jax.jit bulk_viscosity(T, rho)  ·L584: Bulk viscosity ζ [Pa·s]. Batched over leading axis.
+- const _BUILT  ·L526
+- for_eos(eos)  ·L529: The EOS-coupled kernels of backend ``eos`` (built once, on request).
+- const _SW  ·L540
+- const _HAVE_CHI_CHEB  ·L541
+- @jax.jit viscosity(T, rho)  ·L558: Dynamic viscosity μ [Pa·s]. Batched over leading axis.
+- @jax.jit thermal_conductivity(T, rho)  ·L572: Thermal conductivity λ [W/(m·K)]. Batched over leading axis.
+- @jax.jit bulk_viscosity(T, rho)  ·L586: Bulk viscosity ζ [Pa·s]. Batched over leading axis.
 
 ### examples/readme_check.py
 _Run every Python snippet from README.md and print results._
@@ -494,11 +522,35 @@ _Run every Python snippet from README.md and print results._
 - block_dir_check()  ·L87
 - main()  ·L103
 
+### scripts/fit_helium_transport.py
+_Print the fit behind helium's transport: the ab initio dilute part._
+- fit_dilute()  ·L23: (c_η, c_λ, largest η error, largest λ error) from the stored table.
+
 ### scripts/generate_chi_ref_table.py
 _Generate the chi_ref Chebyshev table for the thermal-conductivity_
 - const T_REF  ·L29
 - const DEGREE  ·L31
 - main()  ·L33
+
+### scripts/generate_reference_gas_values.py
+_Write the stored reference values the reference-gas tests compare against._
+- const OUT  ·L29
+- const FLUID  ·L31
+- const BAR  ·L32
+- const GRID_T  ·L33
+- const GRID_P  ·L34
+- const SWIFT_T  ·L35
+- const SWIFT_P  ·L36
+- const HSULAI_T  ·L37
+- const HSULAI_P  ·L38
+- const HIGH_T  ·L39
+- const HIGH_P  ·L40
+- const COLUMNS  ·L42
+- const KEYS  ·L43
+- const M_SCALE  ·L48
+- const POWER  ·L49
+- rows()  ·L53
+- main()  ·L66
 
 ### scripts/generate_saturation_table.py
 _Generate a CO2 saturation table from one of the package's EOS backends._
@@ -769,6 +821,50 @@ _The pressure derivatives in the full-state dict, and the batched (ρ, T) call._
 - test_rho_T_batched_rejects_bad_shapes()  ·L77
 - test_every_full_state_dict_carries_the_derivatives()  ·L84
 - test_derivatives_survive_jit_vmap_and_grad()  ·L105
+
+### tests/test_reference_gases.py
+_The reference-gas backends (air, helium, argon) behind the ``eos=`` keyword._
+- const GASES  ·L25
+- const VALUES  ·L26
+- const TOL  ·L29
+- const TOL_HELIUM_TRANSPORT_ABOVE  ·L33
+- const TOL_ENERGY_SPAN  ·L36
+- _one_percent_limit(gas)  ·L39: Pa, the pressure the 1 % transport bar stands to, past a solve's round-off.
+- _table()  ·L46
+- const TABLE  ·L58
+- _model(gas)  ·L61
+- _state_grid(gas)  ·L67
+- test_names_in_the_registry()  ·L78
+- @pytest.mark.parametrize test_consumer_call_returns_the_span_wagner_bundle(gas)  ·L87
+- @pytest.mark.parametrize test_saturation_refuses_with_the_reason(gas)  ·L100
+- test_unknown_name_refused()  ·L107
+- @pytest.mark.parametrize @pytest.mark.parametrize test_thermo_against_reference(gas, key, field)  ·L116
+- @pytest.mark.parametrize test_density_against_reference(gas)  ·L125
+- @pytest.mark.parametrize @pytest.mark.parametrize test_transport_against_reference(gas, key, field)  ·L135: 1 % to P_MAX on air and argon.  Helium, dilute only: 1 % to Swift's top state.
+- test_helium_transport_limit_covers_swift()  ·L151: The limit is Swift's top state, 13.8 bar, with its swing: every stored Swift row is in.
+- @pytest.mark.parametrize @pytest.mark.parametrize test_energy_differences_against_reference(gas, key, field)  ·L162
+- test_rig_states_are_in_the_stored_table()  ·L171
+- @pytest.mark.parametrize test_monatomic_limit(gas)  ·L180: c_p → (5/2)R as ρ → 0 at every T; the bulk viscosity is exactly 0.
+- @pytest.mark.parametrize test_dilute_limit_is_the_ideal_gas_law(gas)  ·L194
+- const _REL_FLOOR  ·L204
+- _rel(a, b)  ·L207
+- @pytest.mark.parametrize test_residual_derivs_match_autodiff(gas)  ·L212
+- @pytest.mark.parametrize test_ideal_derivs_match_autodiff(gas)  ·L231
+- @pytest.mark.parametrize test_fast_tau_path_matches_full(gas)  ·L248
+- @pytest.mark.parametrize test_bundle_identities(gas)  ·L260: β, K_T, K_s, w and the heat capacities close against autodiff of a(ρ, T).
+- @pytest.mark.parametrize test_rho_u_inversion_round_trip(gas)  ·L304
+- @pytest.mark.parametrize test_density_from_pt_round_trip(gas)  ·L316
+- @pytest.mark.parametrize test_state_from_ph_round_trip(gas)  ·L325
+- _fd(f, x, h)  ·L334
+- @pytest.mark.parametrize test_jit_vmap_grad_of_the_consumer_call(gas)  ·L339
+- @pytest.mark.parametrize test_inversion_gradients(gas)  ·L361
+- @pytest.mark.parametrize test_outside_the_domain_is_nan(gas)  ·L398
+- _published(fluid)  ·L417
+- @pytest.mark.parametrize test_residual_terms_match_the_published_table(gas, fluid)  ·L423
+- @pytest.mark.parametrize test_transport_against_the_published_check_values(gas, table)  ·L457
+- test_helium_transport_reads_its_ab_initio_table()  ·L466
+- test_helium_second_virial_against_ab_initio()  ·L481: B(T) of the series against Hurly and Mehl (2007) Table 5, 200 to 1000 K.
+- @pytest.mark.parametrize test_transport_terms_match_the_published_table(gas, fluid)  ·L491
 
 ### tests/test_rho_u_inversion.py
 _The (ρ, u) → T inversion and the fused properties_from_rho_u path._

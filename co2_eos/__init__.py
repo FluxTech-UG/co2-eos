@@ -11,9 +11,19 @@ Python string, static under ``jax.jit``: one compiled kernel per backend)::
                         24 terms, no nonanalytic terms, free of Span-Wagner's
                         near-critical oscillations in c_p, κ_T, (∂c_v/∂T)_ρ
 
-``EOS_NAMES`` lists them.  The transport correlations keep their own
+``CO2_EOS_NAMES`` lists them.  The transport correlations keep their own
 parameters on either backend; their critical parts read the selected
 backend's thermodynamics.
+
+Three reference gases are backends of the same keyword (``REFERENCE_GAS_NAMES``)::
+
+    eos="air"           Lemmon et al. (2000) virial series, Lemmon & Jacobsen (2004)
+    eos="helium"        Ortiz Vega et al. virial series, an ab initio dilute fit
+    eos="argon"         Tegeler et al. (1999) virial series, Lemmon & Jacobsen (2004)
+
+Each is one closed-form Helmholtz energy (``reference_gases``): every bundle
+field below, no saturation curve (the lookups raise), 200 to 1000 K up to its
+``P_MAX``, NaN outside.  ``EOS_NAMES`` lists all five.
 
 Public API
 ==========
@@ -78,7 +88,7 @@ import jax.numpy as jnp
 # Enable float64 for the entire library (also done by submodules).
 jax.config.update("jax_enable_x64", True)
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 # ── Phase hint constants ────────────────────────────────────────────────────
 LIQUID = 0
@@ -87,7 +97,9 @@ SUPERCRITICAL = 2
 AUTO = SUPERCRITICAL  # alias: auto-pick in the dome / supercritical-style guess
 
 # ── Internal modules ────────────────────────────────────────────────────────
-from co2_eos.backends import EOS_NAMES, DEFAULT_EOS, SPAN_WAGNER, NIST2026
+from co2_eos.backends import (EOS_NAMES, CO2_EOS_NAMES, REFERENCE_GAS_NAMES,
+                              DEFAULT_EOS, SPAN_WAGNER, NIST2026, AIR, HELIUM,
+                              ARGON)
 from co2_eos import span_wagner as _sw
 from co2_eos import transport as _tr
 from co2_eos import saturation as _sat
@@ -292,7 +304,8 @@ def state_from_Du(rho, u, phase_hint=AUTO, eos=DEFAULT_EOS):
 
 __all__ = [
     "__version__",
-    "EOS_NAMES", "DEFAULT_EOS", "SPAN_WAGNER", "NIST2026",
+    "EOS_NAMES", "CO2_EOS_NAMES", "REFERENCE_GAS_NAMES", "DEFAULT_EOS",
+    "SPAN_WAGNER", "NIST2026", "AIR", "HELIUM", "ARGON",
     "LIQUID", "VAPOR", "SUPERCRITICAL", "AUTO",
     "properties_from_rho_u", "properties_from_rho_T", "temperature_from_rho_u",
     "properties",

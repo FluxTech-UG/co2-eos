@@ -82,7 +82,7 @@ def test_against_span_wagner(both, key):
 
 
 def test_reference_state_shared():
-    for eos in ce.EOS_NAMES:
+    for eos in ce.CO2_EOS_NAMES:
         T = 273.15
         rl, _ = ce.saturation_densities(T, eos=eos)
         st = ce.properties(T, rl, eos=eos)

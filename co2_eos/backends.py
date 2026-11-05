@@ -18,6 +18,14 @@ PC, T_TRIPLE`` and ``_scalar_pressure``, ``_scalar_enthalpy``,
 ``residual_tau_prep``, ``residual_tau_fast``, ``residual_tau_derivs``.  Each
 backend carries its own gas constant and molar mass; nothing shared between
 backends assumes Span-Wagner's.
+
+The reference gases ``"air"``, ``"helium"`` and ``"argon"`` are backends of the
+same registry: ``reference_gases`` is the surface and the kernel of each, and
+the bundle ``properties_from_rho_T`` returns is built by the same code.  They
+carry no saturation dome and no near-critical machinery (``has_dome`` False):
+``saturation`` refuses them, and ``transport.for_eos`` and ``inversions.for_eos``
+hand out the namespaces ``reference_gases`` holds, leaving the CO₂ factories
+for the CO₂ backends alone.
 """
 
 from pathlib import Path
@@ -25,20 +33,30 @@ from types import SimpleNamespace
 
 from co2_eos import helmholtz as _helmholtz
 from co2_eos import nist2026 as _nist2026
+from co2_eos import reference_gases as _reference_gases
 from co2_eos import span_wagner as _span_wagner
 
 SPAN_WAGNER = "span_wagner"
 NIST2026 = "nist2026"
-EOS_NAMES = (SPAN_WAGNER, NIST2026)
+AIR = "air"
+HELIUM = "helium"
+ARGON = "argon"
+CO2_EOS_NAMES = (SPAN_WAGNER, NIST2026)
+REFERENCE_GAS_NAMES = (AIR, HELIUM, ARGON)
+EOS_NAMES = CO2_EOS_NAMES + REFERENCE_GAS_NAMES
 DEFAULT_EOS = SPAN_WAGNER
 
 DATA_DIR = Path(__file__).parent / "data"
 
 _BACKENDS = {
     SPAN_WAGNER: SimpleNamespace(name=SPAN_WAGNER, surface=_span_wagner,
-                                 kernel=_helmholtz, suffix=""),
+                                 kernel=_helmholtz, suffix="", has_dome=True),
     NIST2026: SimpleNamespace(name=NIST2026, surface=_nist2026,
-                              kernel=_nist2026, suffix="_nist2026"),
+                              kernel=_nist2026, suffix="_nist2026", has_dome=True),
+    **{name: SimpleNamespace(name=name, surface=_reference_gases.GASES[name],
+                             kernel=_reference_gases.GASES[name], suffix=f"_{name}",
+                             has_dome=False)
+       for name in REFERENCE_GAS_NAMES},
 }
 
 

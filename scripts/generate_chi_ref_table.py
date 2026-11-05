@@ -33,7 +33,7 @@ DEGREE = 100
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--eos", default=backends.DEFAULT_EOS,
-                    choices=backends.EOS_NAMES)
+                    choices=backends.CO2_EOS_NAMES)
     eos = ap.parse_args().eos
     b = backends.get(eos)
     OUT = backends.table_path(eos, "chi_ref_cheb")

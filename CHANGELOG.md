@@ -2,6 +2,41 @@
 
 All notable changes to co2-eos are documented here.
 
+## [0.7.0] - 2026-11-05
+
+Three reference gases on the same `eos=` keyword: air, helium and argon, each one
+closed-form Helmholtz energy, a NASA-7 ideal part plus the δ and δ² terms of the
+gas's reference equation of state.  `properties_from_rho_T(rho, T, eos="air")`
+returns the Span-Wagner bundle's fields.  Span-Wagner stays the default and
+returns the 0.5.0 results bit for bit.
+
+### Added
+
+- `eos="air"`, `"helium"`, `"argon"`; `AIR`, `HELIUM`, `ARGON`,
+  `CO2_EOS_NAMES` and `REFERENCE_GAS_NAMES` exported.  `co2_eos/reference_gases.py`
+  (the one form, its kernels, transport and inversions, the domain guard) and
+  `co2_eos/reference_gases_data.py` (every coefficient, cited by page).
+- Transport: Lemmon and Jacobsen (2004) dilute and residual parts on air and argon;
+  on helium a dilute fit to the ab initio table of Hurly and Mehl (2007),
+  `scripts/fit_helium_transport.py`.
+- Tests against stored CoolProp values (`tests/test_reference_gases.py`,
+  `tests/data/reference_gas_values.csv`, `scripts/generate_reference_gas_values.py`):
+  density 0.05 %, c_p 0.2 %, μ and k 1 %, 200 to 1000 K from 0.05 bar to each gas's
+  `P_MAX`, and the states of the Hsu and Lai and the Swift rigs.
+
+### Changed
+
+- `EOS_NAMES` lists all five backends; code that walks the CO₂ backends reads
+  `CO2_EOS_NAMES`.
+
+### Open
+
+- Air's bulk viscosity is 0: the rotational part is left out, since no published
+  ζ/μ for N₂ and O₂ at these temperatures has been read yet.  Helium's and argon's 0
+  is exact for a dilute monatomic gas.
+- Helium's μ and k hold 1 % to 15.18 bar, Swift's top state with its swing, and reach
+  1.09 % at 20 bar: its transport is dilute only.
+
 ## [0.6.0] - 2026-11-02
 
 A second equation-of-state backend: the NIST IR 8608 equation for CO₂

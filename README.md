@@ -50,6 +50,35 @@ s = co2_eos.properties(314.0, 472.0, eos="nist2026")   # Widom crossing at 9.1 M
 The transport correlations keep their parameters on either backend; their critical parts
 read the selected backend's thermodynamics.
 
+## Reference gases
+
+Air, helium and argon are backends of the same keyword: `eos="air"`, `"helium"` or
+`"argon"` (`co2_eos.REFERENCE_GAS_NAMES`; `co2_eos.CO2_EOS_NAMES` lists the CO₂ two).
+Each is one closed-form Helmholtz energy, a NASA-7 ideal part plus the δ and δ² terms
+of the gas's reference equation of state, read by the same fused code as CO₂, so a call
+site changes only the name and gets every field of the bundle. A batched call after
+compile costs a quarter to three fifths of Span-Wagner's (1000 states on a laptop CPU:
+`properties_from_rho_T` 108 to 187 ns per state against 408, `properties_from_rho_u`
+234 to 371 against 628).
+
+```python
+s = co2_eos.properties_from_rho_T(rho, T, eos="helium")
+```
+
+| | Air | Helium | Argon |
+|---|---|---|---|
+| Equation | Lemmon et al. 2000 | Ortiz Vega et al. 2023 | Tegeler et al. 1999 |
+| Domain | 200 to 1000 K, 20 bar | 200 to 1000 K, 25 bar | 200 to 1000 K, 25 bar |
+| Transport | Lemmon and Jacobsen 2004 | Hurly and Mehl 2007, dilute only | Lemmon and Jacobsen 2004 |
+
+Outside its domain a bundle is NaN, and the saturation lookups raise: a reference gas
+has no dome here. The conductivity carries no critical enhancement (at most 0.20 % of k
+at 200 K, 20 bar). Helium's transport is dilute only, so its 1 % bar stands to 15.18 bar
+and it reaches 1.09 % at 20 bar, 1.33 % at 25 bar.
+
+**Open:** air's bulk viscosity is 0, the rotational part left out. Helium's and argon's 0
+is exact for a dilute monatomic gas.
+
 ## Try it without cloning
 
 [`examples/launch_demo.ipynb`](examples/launch_demo.ipynb) is the launch demo: validation against CoolProp, the `state_from_PT` CPU/GPU benchmarks, and a worked example of gradient-based optimisation through `state_from_PT`. (The v0.2 hot-path `(ρ, u)` benchmarks are in [`bench/PROFILING.md`](bench/PROFILING.md).) [Read it on GitHub](https://github.com/FluxTech-UG/co2-eos/blob/main/examples/launch_demo.ipynb) for a static render, or [open it on Colab](https://colab.research.google.com/github/FluxTech-UG/co2-eos/blob/main/examples/launch_demo.ipynb) and switch the runtime to T4 GPU to reproduce the comparison in about 15 minutes, most of that being the CPU baseline.
@@ -144,6 +173,8 @@ CO2-EOS covers the full fluid region of the Span-Wagner EOS:
 
 Transport properties follow the valid ranges of their respective correlations (broadly: gas and liquid up to 100 MPa, with reduced accuracy in the immediate critical region for thermal conductivity).
 
+The reference gases hold 200 to 1000 K up to each one's `P_MAX` (see Reference gases).
+
 ## Installation
 
 ```bash
@@ -182,6 +213,8 @@ Both libraries implement the same Span-Wagner polynomial and the same reference 
 - **Density and viscosity:** below 10⁻¹² relative error everywhere on the grid (limited by floating-point evaluation order).
 - **cp, speed of sound, thermal conductivity:** below 10⁻⁹ in the bulk; up to a few × 10⁻⁸ for the speed of sound near the Widom line and within ~10 % of the saturation curve, and up to a few × 10⁻⁶ for cp at the very tip of its peak just above the critical pressure. There the inversion's residual ρ-error is amplified through ∂q/∂ρ, which is locally enormous (cp climbs above 30,000 J/(kg·K) at the peak, so a ~0.1 J/(kg·K) absolute difference still rounds to ~10⁻⁶ relative); at the same (T, ρ) the underlying polynomials still agree at machine precision.
 
+The reference gases meet stated tolerances against stored CoolProp values, compared at those tolerances and never by hash (`tests/test_reference_gases.py`): density 0.05 %, c_p 0.2 %, μ and k 1 %. Their transport terms also meet the check values Lemmon and Jacobsen (2004) print, and helium's the ab initio table of Hurly and Mehl (2007).
+
 Run the validation suite:
 
 ```bash
@@ -190,7 +223,7 @@ pytest tests/ -v
 
 ## Scope and philosophy
 
-CO2-EOS is a CO₂-first library. Rather than expanding to cover more fluids, we go deeper on CO₂, improving accuracy, coverage, and robustness in the regions that matter for real engineering: near-critical, transcritical, and two-phase.
+CO2-EOS is a CO₂-first library. It goes deep on CO₂, improving accuracy, coverage, and robustness in the regions that matter for real engineering: near-critical, transcritical, and two-phase. The reference gases are deliberately narrow: three dilute-to-moderate-pressure gases at low cost, so a code built on this package can run a published air, helium or argon experiment through the same call.
 
 There are excellent general-purpose thermodynamic libraries: CoolProp for broad fluid coverage, teqp for autodiff-native multi-model EOS evaluation, FeOs for SAFT models and density functional theory, and Clapeyron.jl in the Julia ecosystem. CO2-EOS complements these by providing a JAX-native path for the single fluid where differentiability, speed, and near-critical robustness matter most.
 

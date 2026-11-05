@@ -2,7 +2,7 @@
 
 Differentiable CO₂ thermodynamic properties in JAX: pure-JAX Helmholtz equations of state
 (Span-Wagner 1996, the default, and NIST IR 8608 of 2026) with hand-coded analytic
-α-derivatives. Every
+α-derivatives, and three reference gases (air, helium, argon) on the same keyword. Every
 property is JIT-compilable, `vmap`-vectorisable, and differentiable with `jax.grad`.
 This is a **package**: the simulation and modelling repos import it; it imports nothing
 back. Public and open-source (Apache-2.0).
@@ -19,11 +19,16 @@ current symbol-level inventory. The shape:
   and analytic α-derivatives), `helmholtz.py`, `core.py` (the fused (ρ, u)
   primitive-recovery kernel), `inversions.py`, `saturation.py`, `transport.py`, and the
   precomputed saturation/seed tables in `co2_eos/data/`.
-- **Two backends, one static switch.** Every public function takes `eos=`, a Python string
-  static under `jax.jit`: `"span_wagner"` (the default; `span_wagner.py` and `helmholtz.py`)
-  or `"nist2026"` (NIST IR 8608, Lemmon, Harvey and Hellmann 2026: `nist2026_data.py` holds
+- **Five backends, one static switch.** Every public function takes `eos=`, a Python string
+  static under `jax.jit`: `"span_wagner"` (the default; `span_wagner.py` and `helmholtz.py`),
+  `"nist2026"` (NIST IR 8608, Lemmon, Harvey and Hellmann 2026: `nist2026_data.py` holds
   its constants, cited by page, `nist2026.py` its α, analytic kernels and property
-  functions). `backends.py` is the registry; `core`, `inversions`, `saturation` and the
+  functions), and the reference gases `"air"`, `"helium"`, `"argon"`
+  (`reference_gases_data.py`, every coefficient cited by page; `reference_gases.py`, one
+  virial Helmholtz form, no saturation dome, NaN outside `T_RANGE` and `P_MAX`).
+  `CO2_EOS_NAMES` and `REFERENCE_GAS_NAMES` are the two groups, `EOS_NAMES` all five; code
+  that walks the CO₂ backends reads `CO2_EOS_NAMES`.
+  `backends.py` is the registry; `core`, `inversions`, `saturation` and the
   EOS-coupled half of `transport` are built once per backend by a factory over the same
   code, and the module-level names are the Span-Wagner instance. Each backend carries its
   own R, M, ρ_c and tables (`<stem>_nist2026.npz`, from the scripts' `--eos`). The
@@ -58,4 +63,6 @@ control flow for anything that depends on a traced value, so `jit`, `vmap`, `gra
 **Accuracy is validated against CoolProp across the full valid range.** The test suite
 (`tests/test_accuracy_vs_coolprop.py`, `test_analytic_derivs.py`,
 `test_inversion_gradients.py`, `test_dome_detection.py`) is the acceptance bar; a change
-is done when it is green.
+is done when it is green. The reference gases meet stated tolerances against the stored
+CoolProp values of `tests/data/reference_gas_values.csv` (`tests/test_reference_gases.py`):
+density 0.05 %, c_p 0.2 %, μ and k 1 %, helium's transport to `P_ONE_PERCENT`.

@@ -281,6 +281,8 @@ def _vibrational_relaxation_time(T, rho):
 def _build(eos):
     """The EOS-coupled transport kernels on backend ``eos``, as a namespace."""
     _b = _backends.get(eos)
+    if not _b.has_dome:
+        return _b.kernel.transport
     hz = _b.kernel
     TC_B = _b.surface.TC
     R_MOLAR_B = _b.surface.R_MOLAR
