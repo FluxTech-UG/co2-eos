@@ -60,12 +60,13 @@ Two tiers, split by the `slow` marker (registered in `pyproject.toml`):
   it before its commit; the acceptance bar below counts these tests.
 - **`make gate`**: the commit gate, run as `gate <repo path>`. It is `make test` with the
   `pytest_budget` plugin loaded, which fails any test not marked `slow` whose setup + call +
-  teardown runs over `TEST_BUDGET_S` (30 s; the slowest unmarked test takes about 22 s under
-  the 8 workers), with "mark it slow or shrink it". `gate` fails a run longer than
-  `GATE_BUDGET_S` (120 s). Both budgets live in the `Makefile`.
+  teardown runs over `TEST_BUDGET_S`, with "mark it slow or shrink it". `gate` fails a run
+  longer than `GATE_BUDGET_S`. Both budgets live in the `Makefile`, sized for a machine
+  running other suites beside this one: the first JAX compile of a test's gradient lands on
+  whichever test triggers it and stretches with the load.
 
-CI runs `pytest tests/ -v`: every test, both tiers, without the budget plugin, which is loaded
-only by `make gate` so a clone without it runs the suite unchanged.
+CI runs `pytest tests/ -v`: every test, both tiers, without the budget plugin. Only `make gate`
+loads the plugin, so a clone without it runs the plain suite.
 
 ## Critical rules
 
