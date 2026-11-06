@@ -80,7 +80,6 @@ def test_names_in_the_registry():
     assert ce.REFERENCE_GAS_NAMES == GASES
     assert ce.CO2_EOS_NAMES == ("span_wagner", "nist2026")
     assert ce.EOS_NAMES == ce.CO2_EOS_NAMES + ce.REFERENCE_GAS_NAMES
-    assert ce.DEFAULT_EOS == "span_wagner"
 
 
 @pytest.mark.parametrize("gas", GASES)

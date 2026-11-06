@@ -50,9 +50,15 @@ def block_state_from_PT():
     print(f"  pressure  = {P:.4e} Pa")
     # CoolProp reference at (P=8 MPa, T=310 K): 327.7120900180151 kg/m³
     # (gas-like side of the Widom line: supercritical but low-density).
-    _check("density agrees with CoolProp at (8 MPa, 310 K) to 1e-6 rel.",
-           abs(rho - 327.7120900180151) / 327.7120900180151 < 1e-6,
-           f"got {rho:.6f}, expected ~327.712")
+    # CoolProp's CO2 is Span-Wagner: the comparison names that backend; the
+    # default (NIST IR 8608) sits within its uncertainty of it.
+    rho_sw = float(co2.state_from_PT(P=8e6, T=310.0, eos="span_wagner")["density"])
+    _check("span_wagner density agrees with CoolProp at (8 MPa, 310 K) to 1e-6 rel.",
+           abs(rho_sw - 327.7120900180151) / 327.7120900180151 < 1e-6,
+           f"got {rho_sw:.6f}, expected ~327.712")
+    _check("default (nist2026) density within 0.1 % of Span-Wagner",
+           abs(rho - rho_sw) / rho_sw < 1e-3,
+           f"got {rho:.6f} against {rho_sw:.6f}")
     _check("pressure echoes the input (8e6 Pa)",
            abs(P - 8e6) < 1.0,
            f"got {P:.3e}")

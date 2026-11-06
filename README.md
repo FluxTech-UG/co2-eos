@@ -5,7 +5,7 @@
 
 Differentiable CO₂ thermodynamic properties in JAX.
 
-CO2-EOS is a pure-JAX implementation of the Span-Wagner equation of state for carbon dioxide, with hand-coded analytic α-derivatives. Every property evaluation is JIT-compiled, vectorisable with `vmap`, and fully differentiable with `jax.grad`, enabling gradient-based optimisation of any system that depends on CO₂ thermodynamics.
+CO2-EOS is a pure-JAX implementation of the reference equations of state for carbon dioxide, NIST IR 8608 (2026, the default) and Span-Wagner (1996), with hand-coded analytic α-derivatives. Every property evaluation is JIT-compiled, vectorisable with `vmap`, and fully differentiable with `jax.grad`, enabling gradient-based optimisation of any system that depends on CO₂ thermodynamics.
 
 ```python
 import co2_eos as co2
@@ -18,7 +18,7 @@ rho = jnp.array([300.0, 350.0, 420.0])      # kg/m³
 u   = jnp.array([3.62e5, 3.58e5, 3.42e5])   # J/kg  (specific internal energy)
 state = co2.properties_from_rho_u(rho, u)   # dict of arrays: T, P, cp, w, μ, k, …
 print(state['temperature'], state['pressure'], state['speed_of_sound'])
-# -> T ≈ [307.5, 315.4, 315.6] K, P ≈ [7.6, 8.8, 9.1] MPa  (supercritical)
+# -> T ≈ [307.5, 315.4, 315.7] K, P ≈ [7.6, 8.8, 9.2] MPa  (supercritical)
 
 # Properties from (T, ρ)  (scalar; vmap for batches)
 state = co2.properties(T=310.0, rho=350.0)
@@ -38,13 +38,15 @@ states = jax.vmap(lambda T: co2.state_from_PT(P=8e6, T=T))(T_array)
 
 ## Two equations of state
 
-Every public function takes `eos=`: `"span_wagner"` (Span and Wagner 1996, the default)
-or `"nist2026"` (Lemmon, Harvey and Hellmann, NIST IR 8608, 2026: 24 terms with no
-nonanalytic terms, free of Span-Wagner's near-critical oscillations in c_p, κ_T and
-(∂c_v/∂T)_ρ). The name is static under `jax.jit`, so each backend compiles once.
+Every public function takes `eos=`: `"nist2026"` (Lemmon, Harvey and Hellmann, NIST IR
+8608, 2026, the default: 24 terms with no nonanalytic terms, free of Span-Wagner's
+near-critical oscillations in c_p, κ_T and (∂c_v/∂T)_ρ) or `"span_wagner"` (Span and
+Wagner 1996, bit for bit the 0.5.0 results). The name is static under `jax.jit`, so each
+backend compiles once.
 
 ```python
-s = co2_eos.properties(314.0, 472.0, eos="nist2026")   # Widom crossing at 9.1 MPa
+s = co2_eos.properties(314.0, 472.0)                       # NIST IR 8608, Widom crossing at 9.1 MPa
+s_sw = co2_eos.properties(314.0, 472.0, eos="span_wagner")  # the same state on Span-Wagner
 ```
 
 The transport correlations keep their parameters on either backend; their critical parts
@@ -92,7 +94,7 @@ But CoolProp is a C++ library with Python bindings. You can't `jax.grad` through
 CO2-EOS solves this for CO₂ by implementing the same reference EOS (Span-Wagner 1996) directly in JAX:
 
 - **Differentiable.** `jax.grad` through any property, any inversion, any combination. No finite differences. The inversions carry hand-written `custom_jvp` rules (implicit function theorem), so forward- and reverse-mode gradients are exact and cheap; validated against central finite differences.
-- **Fast.** JIT-compiled and vectorisable, with hand-coded, transcendental-economized analytic α-derivatives: the Span-Wagner exponent structure (¼-integer τ-powers, integer δ-powers, shared exponential envelopes) is evaluated by sqrt/multiply ladders, so a full six-derivative bundle costs ~12 exps + 3 pows per point instead of ~150 array-exponent pows: the same arithmetic, re-associated, exact to round-off. For simulation codes that carry `(ρ, u)` as conserved variables, `properties_from_rho_u` fuses the whole primitive recovery: a dome-safe table seed plus three unrolled analytic-Cv Newton steps recover `T(ρ, u)` to 1e-12 K, and one shared derivative bundle feeds every property including the transport critical enhancement. On an Apple M2 Pro (float64) the full recovery runs **123 µs for a 64-point batch and 0.53 µs/point at large batches, 7.6–19.9× faster than the v0.1 autodiff path** and 2.6–6.3× faster than v0.2. On an OVH Tesla V100S the inversion reaches **63.7×** vs v0.1 at a 2²⁰-point batch (2 ns/point; full recovery 16 ns/point), and the launch-latency floor at small batches dropped ~1.7× (`bench/compare.py`, `bench/PROFILING.md`, validation in `docs/validation-fastpath-2026-07.md`).
+- **Fast.** JIT-compiled and vectorisable, with hand-coded, transcendental-economized analytic α-derivatives: the Span-Wagner exponent structure (¼-integer τ-powers, integer δ-powers, shared exponential envelopes) is evaluated by sqrt/multiply ladders, so a full six-derivative bundle costs ~12 exps + 3 pows per point instead of ~150 array-exponent pows: the same arithmetic, re-associated, exact to round-off. For simulation codes that carry `(ρ, u)` as conserved variables, `properties_from_rho_u` fuses the whole primitive recovery: a dome-safe table seed plus unrolled analytic-Cv Newton steps (three on Span-Wagner, five on nist2026) recover `T(ρ, u)` to 1e-12 K, and one shared derivative bundle feeds every property including the transport critical enhancement. Measured on Span-Wagner: on an Apple M2 Pro (float64) the full recovery runs **123 µs for a 64-point batch and 0.53 µs/point at large batches, 7.6–19.9× faster than the v0.1 autodiff path** and 2.6–6.3× faster than v0.2. On an OVH Tesla V100S the inversion reaches **63.7×** vs v0.1 at a 2²⁰-point batch (2 ns/point; full recovery 16 ns/point), and the launch-latency floor at small batches dropped ~1.7× (`bench/compare.py`, `bench/PROFILING.md`, validation in `docs/validation-fastpath-2026-07.md`).
 - **Also fast for `(P, T)`.** The `state_from_PT` workflow that mirrors `PropsSI` includes an iterative density solve and flattens to a few tens of microseconds per point at large batches, roughly 2.7× faster than `CoolProp.PropsSI` in a Python loop on the same inputs (10,000-point batch, Apple M2 Pro; see `examples/launch_demo.ipynb`, section 2). On a Colab T4 GPU it runs at 27,800 states/sec on a 10⁶-point batch (36 μs/pt) versus 1,600 states/sec on Colab CPU (615 μs/pt), a 17× speedup. Its ceiling is the density solve's data-dependent `while_loop` (lockstep across GPU warps); the feed-forward `(ρ, u)` hot path above does not have that bottleneck.
 - **Composable.** `jit`, `vmap`, `grad`, `custom_vjp`: the full JAX transformation stack works. Embed property evaluations inside your own JIT-compiled simulation and differentiate end-to-end.
 - **Phase-aware.** Robust inversions near the critical point using Halley's method with step damping and bisection fallback. Two-phase dome detection that avoids convergence to thermodynamically unstable spinodal states.

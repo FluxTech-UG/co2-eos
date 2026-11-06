@@ -19,7 +19,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-import co2_eos as co2
+from tests.span_wagner_api import co2   # the Span-Wagner path, eos bound
 from co2_eos import transport as tr
 from co2_eos.core import _thermo
 

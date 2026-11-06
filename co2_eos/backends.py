@@ -4,12 +4,12 @@ Every public function of co2-eos takes a keyword ``eos``, a Python string that
 is static under ``jax.jit`` (one compiled kernel per backend; no traced
 branching), with the default ``DEFAULT_EOS``:
 
-  * ``"span_wagner"``: Span & Wagner (1996), the default.  Its surface is
-    ``span_wagner`` (constants, α, the autodiff property functions) and its
+  * ``"nist2026"``: Lemmon, Harvey & Hellmann, NIST IR 8608 (2026), the
+    default: 24 terms with no nonanalytic terms.  Surface and kernel are both
+    ``nist2026``; its tables carry the suffix ``_nist2026``.
+  * ``"span_wagner"``: Span & Wagner (1996), bit for bit 0.5.0.  Its surface
+    is ``span_wagner`` (constants, α, the autodiff property functions) and its
     analytic kernel ``helmholtz``; its tables carry no suffix.
-  * ``"nist2026"``: Lemmon, Harvey & Hellmann, NIST IR 8608 (2026), 24 terms
-    with no nonanalytic terms.  Surface and kernel are both ``nist2026``; its
-    tables carry the suffix ``_nist2026``.
 
 A backend's surface module provides ``TC, RHOC, RHOC_MOLAR, R, R_MOLAR, M,
 PC, T_TRIPLE`` and ``_scalar_pressure``, ``_scalar_enthalpy``,
@@ -44,7 +44,7 @@ ARGON = "argon"
 CO2_EOS_NAMES = (SPAN_WAGNER, NIST2026)
 REFERENCE_GAS_NAMES = (AIR, HELIUM, ARGON)
 EOS_NAMES = CO2_EOS_NAMES + REFERENCE_GAS_NAMES
-DEFAULT_EOS = SPAN_WAGNER
+DEFAULT_EOS = NIST2026
 
 DATA_DIR = Path(__file__).parent / "data"
 

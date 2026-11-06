@@ -12,7 +12,7 @@ path; a degree-100 Chebyshev fit reproduces f to 3e-13 max relative error over
 δ ∈ [0, 2.75] (ρ up to ~1286 kg/m³, beyond the inversion bisection bound) and
 evaluates in ~100 fma by Clenshaw recurrence.
 
-Run:  python scripts/generate_chi_ref_table.py [--eos nist2026]
+Run:  python scripts/generate_chi_ref_table.py [--eos span_wagner]
 Writes co2_eos/data/chi_ref_cheb<suffix>.npz (``_nist2026`` for NIST IR 8608).
 """
 

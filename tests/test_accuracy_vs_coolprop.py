@@ -31,7 +31,7 @@ jax.config.update("jax_enable_x64", True)
 
 CP = pytest.importorskip("CoolProp.CoolProp")
 
-import co2_eos as co2
+from tests.span_wagner_api import co2   # the Span-Wagner path, eos bound
 
 
 # State-dict key → CoolProp PropsSI key

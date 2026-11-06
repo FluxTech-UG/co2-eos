@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          # Full history: test_sw_default_bit_for_bit.py archives the 0.5.0
+          # Full history: test_span_wagner_bit_for_bit.py archives the 0.5.0
           # commit and skips on a shallow clone.
           fetch-depth: 0
 

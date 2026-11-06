@@ -2,6 +2,32 @@
 
 All notable changes to co2-eos are documented here.
 
+## [0.8.0] - 2026-11-06
+
+NIST IR 8608 (Lemmon, Harvey and Hellmann 2026) is the default backend:
+`DEFAULT_EOS` is `"nist2026"`, so every public function called without `eos=`
+reads the NIST surface.  `eos="span_wagner"` returns the 0.5.0 results bit for
+bit.
+
+### Changed
+
+- `DEFAULT_EOS = NIST2026`.  A caller that needs Span-Wagner names it,
+  `eos="span_wagner"`.
+- The submodules' module-level names stay the Span-Wagner instance:
+  `co2_eos.saturation.*` defaults to `"span_wagner"`, like `inversions`,
+  `transport` and `span_wagner`, so a caller importing from the submodules
+  lands on one backend.  The package's `co2_eos.saturation_*` take `eos=` with
+  the package default.
+- The table scripts' `--eos` defaults to `DEFAULT_EOS` (nist2026); Span-Wagner's
+  tables are generated with `--eos span_wagner`.
+- Tests: `tests/test_span_wagner_bit_for_bit.py` (with `tests/span_wagner_probe.py`)
+  checks `eos="span_wagner"`, and the submodules' names called with no `eos`,
+  against a `git archive` of 0.5.0; `tests/test_default_eos.py` checks the
+  default is nist2026 on every public function, the same bits as the named
+  call.  The tests that validate Span-Wagner (against CoolProp, the autodiff
+  oracle, the submodules) call it through `tests/span_wagner_api.py`, the
+  public API with `eos="span_wagner"` bound.
+
 ## [0.7.0] - 2026-11-05
 
 Three reference gases on the same `eos=` keyword: air, helium and argon, each one

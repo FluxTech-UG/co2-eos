@@ -19,7 +19,7 @@ subcritical liquid/vapor points the test suite exercises:
 
     ρ ∈ [60, 1050] kg/m³ ,  T ∈ [255, 345] K  (u-grid spans this box)
 
-Run:  python scripts/generate_seed_table.py [--eos nist2026]
+Run:  python scripts/generate_seed_table.py [--eos span_wagner]
 Writes co2_eos/data/seed_table<suffix>.npz (``_nist2026`` for NIST IR 8608;
 it reads that backend's saturation table, so generate that one first).
 """

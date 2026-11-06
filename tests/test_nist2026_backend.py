@@ -58,7 +58,7 @@ def test_every_public_function_takes_eos():
 
 
 def test_backends_differ_where_they_should():
-    a = ce.properties(314.0, 472.0)
+    a = ce.properties(314.0, 472.0, eos=ce.SPAN_WAGNER)
     b = ce.properties(314.0, 472.0, eos=E)
     for k in ("pressure", "cp", "thermal_conductivity", "bulk_viscosity"):
         assert float(a[k]) != float(b[k])

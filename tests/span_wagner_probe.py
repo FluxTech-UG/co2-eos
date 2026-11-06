@@ -1,12 +1,15 @@
-"""Evaluate the public API at its defaults on a fixed grid; write an .npz.
+"""Evaluate the public API's Span-Wagner path on a fixed grid; write an .npz.
 
-Run by ``test_sw_default_bit_for_bit`` in a subprocess, once against the
-0.5.0 package (a ``git archive`` of its commit) and once against this
-checkout, each as ``PYTHONPATH=<root> python -P sw_default_probe.py OUT``.
-It calls only names 0.5.0 already had, with no ``eos`` argument, so the two
-outputs must agree bit for bit.  Not a test module (no ``test_`` prefix).
+Run by ``test_span_wagner_bit_for_bit`` in a subprocess, once against the
+0.5.0 package (a ``git archive`` of its commit; Span-Wagner was its only
+backend) as ``PYTHONPATH=<root> python -P span_wagner_probe.py OUT``, and once
+against this checkout with the backend named,
+``... span_wagner_probe.py OUT span_wagner``.  It calls only names 0.5.0
+already had, so the two outputs must agree bit for bit.  Not a test module
+(no ``test_`` prefix).
 """
 import sys
+from functools import partial
 
 import numpy as np
 import jax
@@ -14,7 +17,30 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-import co2_eos as ce
+import co2_eos as _ce
+
+# With a backend named (argv[2]), every call carries ``eos=<name>``; without
+# one, the calls are 0.5.0's, which took no ``eos``.
+_EOS = sys.argv[2] if len(sys.argv) > 2 else None
+_NAMES = ("properties_from_rho_T", "properties_from_rho_u",
+          "temperature_from_rho_u", "properties", "state_from_Du", "viscosity",
+          "thermal_conductivity", "bulk_viscosity", "density_from_PT",
+          "state_from_PT", "state_from_Ph", "saturation_pressure",
+          "saturation_densities", "saturation_enthalpies",
+          "saturation_entropies", "saturation_temperature",
+          "saturation_densities_P", "saturation_enthalpies_P",
+          "saturation_entropies_P")
+
+
+class _Api:
+    AUTO, LIQUID, VAPOR = _ce.AUTO, _ce.LIQUID, _ce.VAPOR
+    __file__ = _ce.__file__
+
+
+ce = _Api()
+for _name in _NAMES:
+    _fn = getattr(_ce, _name)
+    setattr(ce, _name, _fn if _EOS is None else partial(_fn, eos=_EOS))
 
 out = {}
 
@@ -86,6 +112,26 @@ put("grad/density_from_PT", jax.vmap(jax.grad(
 put("grad/state_from_Ph/temperature", jax.vmap(jax.grad(
     lambda p, h: ce.state_from_Ph(p, h)["temperature"], argnums=(0, 1)))(PH, HH))
 put("grad/saturation_pressure", jax.vmap(jax.grad(ce.saturation_pressure))(TS))
+
+# The submodules' module-level names are the Span-Wagner instance: called with
+# no ``eos`` on both sides, as a consumer importing from them calls them.
+from co2_eos import inversions as _inv, saturation as _sat, transport as _tr
+
+for name in ("saturation_pressure", "saturation_densities",
+             "saturation_entropies"):
+    put(f"saturation.{name}", getattr(_sat, name)(TS))
+for name in ("saturation_temperature", "saturation_enthalpies",
+             "saturation_densities_P", "saturation_entropies_P"):
+    put(f"saturation.{name}", getattr(_sat, name)(PS))
+h = jnp.full(PP.shape, _ce.AUTO, dtype=jnp.int32)
+put("inversions.density_from_PT", _inv.density_from_PT(TP, PP, h))
+put("inversions.state_from_Ph", _inv.state_from_Ph(
+    PH, HH, jnp.full(PH.shape, _ce.AUTO, dtype=jnp.int32)))
+put("inversions.temperature_from_Du", _inv.temperature_from_Du(
+    RR, U, jnp.full(RR.shape, _ce.AUTO, dtype=jnp.int32)))
+put("transport.viscosity", _tr.viscosity(TT, RR))
+put("transport.thermal_conductivity", _tr.thermal_conductivity(TT, RR))
+put("transport.bulk_viscosity", _tr.bulk_viscosity(TT, RR))
 
 np.savez(sys.argv[1], **out)
 print("co2_eos loaded from", ce.__file__)

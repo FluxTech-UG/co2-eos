@@ -6,10 +6,11 @@ analytic α-derivatives.  JIT-compilable, ``vmap``-able, fully differentiable.
 Two backends, selected by the keyword ``eos`` every public function takes (a
 Python string, static under ``jax.jit``: one compiled kernel per backend)::
 
-    eos="span_wagner"   Span & Wagner (1996), the default, bit for bit 0.5.0
-    eos="nist2026"      Lemmon, Harvey & Hellmann, NIST IR 8608 (2026):
-                        24 terms, no nonanalytic terms, free of Span-Wagner's
-                        near-critical oscillations in c_p, κ_T, (∂c_v/∂T)_ρ
+    eos="nist2026"      Lemmon, Harvey & Hellmann, NIST IR 8608 (2026), the
+                        default: 24 terms, no nonanalytic terms, free of
+                        Span-Wagner's near-critical oscillations in c_p, κ_T,
+                        (∂c_v/∂T)_ρ
+    eos="span_wagner"   Span & Wagner (1996), bit for bit 0.5.0
 
 ``CO2_EOS_NAMES`` lists them.  The transport correlations keep their own
 parameters on either backend; their critical parts read the selected
@@ -70,7 +71,7 @@ Transport (scalar; vmap for batches)::
     thermal_conductivity(T, rho)    → λ  [W/(m·K)]
     bulk_viscosity(T, rho)          → ζ  [Pa·s]  (vibrational + critical)
 
-Every function above also takes ``eos=`` (default ``"span_wagner"``).
+Every function above also takes ``eos=`` (default ``"nist2026"``, ``DEFAULT_EOS``).
 
 Phase hints::
 
@@ -88,7 +89,7 @@ import jax.numpy as jnp
 # Enable float64 for the entire library (also done by submodules).
 jax.config.update("jax_enable_x64", True)
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 # ── Phase hint constants ────────────────────────────────────────────────────
 LIQUID = 0
@@ -109,15 +110,49 @@ from co2_eos import core as _core
 # jit with the backend name static: one compiled kernel per backend.
 _jit = partial(jax.jit, static_argnames=("eos",))
 
-# ── Re-exports: saturation curve ────────────────────────────────────────────
-saturation_pressure = _sat.saturation_pressure
-saturation_temperature = _sat.saturation_temperature
-saturation_densities = _sat.saturation_densities
-saturation_densities_P = _sat.saturation_densities_P
-saturation_enthalpies = _sat.saturation_enthalpies_T
-saturation_enthalpies_P = _sat.saturation_enthalpies
-saturation_entropies = _sat.saturation_entropies
-saturation_entropies_P = _sat.saturation_entropies_P
+# ── Saturation curve: the submodule's lookups at the package default ────────
+# ``saturation``'s own names default to the Span-Wagner instance, like every
+# submodule's; these take ``DEFAULT_EOS``.
+
+def saturation_pressure(T, eos=DEFAULT_EOS):
+    """Saturation pressure P_sat [Pa] at temperature T [K]."""
+    return _sat.saturation_pressure(T, eos=eos)
+
+
+def saturation_temperature(P, eos=DEFAULT_EOS):
+    """Saturation temperature T_sat [K] at pressure P [Pa]."""
+    return _sat.saturation_temperature(P, eos=eos)
+
+
+def saturation_densities(T, eos=DEFAULT_EOS):
+    """Saturated (rho_l, rho_v) [kg/m³] at temperature T [K]."""
+    return _sat.saturation_densities(T, eos=eos)
+
+
+def saturation_densities_P(P, eos=DEFAULT_EOS):
+    """Saturated (rho_l, rho_v) [kg/m³] at pressure P [Pa]."""
+    return _sat.saturation_densities_P(P, eos=eos)
+
+
+def saturation_enthalpies(T, eos=DEFAULT_EOS):
+    """Saturated (h_l, h_v) [J/kg] at temperature T [K]."""
+    return _sat.saturation_enthalpies_T(T, eos=eos)
+
+
+def saturation_enthalpies_P(P, eos=DEFAULT_EOS):
+    """Saturated (h_l, h_v) [J/kg] at pressure P [Pa]."""
+    return _sat.saturation_enthalpies(P, eos=eos)
+
+
+def saturation_entropies(T, eos=DEFAULT_EOS):
+    """Saturated (s_l, s_v) [J/(kg·K)] at temperature T [K]."""
+    return _sat.saturation_entropies(T, eos=eos)
+
+
+def saturation_entropies_P(P, eos=DEFAULT_EOS):
+    """Saturated (s_l, s_v) [J/(kg·K)] at pressure P [Pa]."""
+    return _sat.saturation_entropies_P(P, eos=eos)
+
 
 
 # ── Transport (scalar form; vmap for batches) ───────────────────────────────

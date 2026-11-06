@@ -14,7 +14,7 @@ Outputs co2_eos/data/saturation_table<suffix>.npz (no suffix for Span-Wagner,
 JIT-compilable interpolation in co2_eos/saturation.py. The .npz lives inside
 the package so it ships in the wheel.
 
-Run:  python scripts/generate_saturation_table.py [--eos nist2026]
+Run:  python scripts/generate_saturation_table.py [--eos span_wagner]
 """
 
 import argparse

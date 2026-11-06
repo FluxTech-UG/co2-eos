@@ -1,12 +1,12 @@
-"""The Span-Wagner default is bit for bit the 0.5.0 package.
+"""The Span-Wagner backend, named with ``eos="span_wagner"``, is bit for bit 0.5.0.
 
-co2-eos 0.6.0 adds a second backend (``eos="nist2026"``) behind a static
-switch whose default is ``"span_wagner"``.  Every public function called as
-0.5.0 called it must return the same bits.  The reference is computed live,
-not stored: XLA:CPU's fusions differ across CPUs, so a stored array would
-fail on another machine for reasons unrelated to the code.  The 0.5.0 package
-is extracted from git (``git archive``) and the same probe
-(``sw_default_probe.py``) runs against it and against this checkout, each in
+0.5.0 had Span-Wagner as its only equation of state.  Every public function of
+0.5.0, called here with ``eos="span_wagner"``, must return the bits 0.5.0
+returned for the same call without the keyword.  The reference is computed
+live, not stored: XLA:CPU's fusions differ across CPUs, so a stored array
+would fail on another machine for reasons unrelated to the code.  The 0.5.0
+package is extracted from git (``git archive``) and the same probe
+(``span_wagner_probe.py``) runs against it and against this checkout, each in
 its own interpreter, and every array must be equal (NaN equal to NaN).
 
 Skips when git or the 0.5.0 commit is not available (a shallow clone).
@@ -21,17 +21,17 @@ import numpy as np
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
-PROBE = Path(__file__).resolve().parent / "sw_default_probe.py"
+PROBE = Path(__file__).resolve().parent / "span_wagner_probe.py"
 REF_COMMIT = "f54b86b6092d254c593863a2321e7c5ab1af9983"   # 0.5.0 + docs/MAP.md
 
 
-def _run_probe(root, out):
+def _run_probe(root, out, *eos):
     env = dict(os.environ, PYTHONPATH=str(root), JAX_ENABLE_X64="1")
     # -P (3.11+) keeps the probe's own directory off sys.path; on 3.10 the
     # directory is tests/, which holds no co2_eos, and the loaded-from check
     # below proves the import came from `root` either way.
     safe_path = ["-P"] if sys.version_info >= (3, 11) else []
-    r = subprocess.run([sys.executable, *safe_path, str(PROBE), str(out)],
+    r = subprocess.run([sys.executable, *safe_path, str(PROBE), str(out), *eos],
                        env=env, capture_output=True, text=True, timeout=900)
     assert r.returncode == 0, r.stdout + r.stderr
     # Not vacuous: each run imported the package under its own root, not the
@@ -41,7 +41,7 @@ def _run_probe(root, out):
     return dict(np.load(out))
 
 
-def test_sw_default_bit_for_bit(tmp_path):
+def test_span_wagner_bit_for_bit(tmp_path):
     if shutil.which("git") is None:
         pytest.skip("git not on PATH")
     probe = subprocess.run(["git", "-C", str(REPO), "cat-file", "-e",
@@ -56,7 +56,7 @@ def test_sw_default_bit_for_bit(tmp_path):
                    check=True)
 
     ref = _run_probe(old, tmp_path / "ref.npz")
-    new = _run_probe(REPO, tmp_path / "new.npz")
+    new = _run_probe(REPO, tmp_path / "new.npz", "span_wagner")
     assert sorted(ref) == sorted(new)
     differ = [k for k in ref
               if ref[k].shape != new[k].shape
