@@ -659,13 +659,15 @@ _Bulk viscosity ζ = ζ_vib + ζ_crit (0.5.0)._
 
 ### tests/test_default_eos.py
 _The default backend is NIST IR 8608 (2026), ``eos="nist2026"``._
-- test_default_eos_is_nist2026()  ·L15
-- test_every_public_function_defaults_to_nist2026()  ·L19
-- test_batched_transport_names_its_backend()  ·L33: ``transport``'s batched functions take ``eos``; Span-Wagner is named.
-- test_generic_constants_are_the_default_surface()  ·L47: A public constant of a submodule that a backend surface also carries
-- test_critical_and_triple_point_follow_the_backend()  ·L63
-- test_submodule_names_are_the_nist2026_instance()  ·L85: Every generic module-level name of a submodule is its nist2026 form.
-- test_default_call_equals_named_nist2026_call()  ·L108
+- test_default_eos_is_nist2026()  ·L16
+- test_every_public_function_defaults_to_nist2026()  ·L20
+- test_batched_transport_names_its_backend()  ·L34: ``transport``'s batched functions take ``eos``; Span-Wagner is named.
+- _surface_constants()  ·L48: The public constant names a CO2 backend's surface carries (TC, PC, M, ...).
+- _off_default_constants(modules)  ·L58: Each ``module.NAME`` that shares a surface constant's name and differs
+- test_generic_constants_are_the_default_surface()  ·L68: No generic name holds a Span-Wagner constant.
+- test_critical_and_triple_point_follow_the_backend()  ·L87
+- test_submodule_names_are_the_nist2026_instance()  ·L109: Every generic module-level name of a submodule is its nist2026 form.
+- test_default_call_equals_named_nist2026_call()  ·L132
 
 ### tests/test_density_from_PT_branch.py
 _density_from_PT below TC must land on the stable branch under the auto hint._
@@ -715,12 +717,18 @@ _Generic names hold no Span-Wagner content, and the docs state the current state
 - const PKG  ·L18
 - const ROOT  ·L19
 - _docstrings(path)  ·L22
-- test_span_wagner_content_lives_under_span_wagner_names()  ·L29: A module importing Span-Wagner's coefficient tables is named for it.
-- test_docs_state_the_current_state()  ·L41
-- test_generic_modules_describe_every_backend()  ·L49
-- test_inversion_temperature_ceiling_has_one_home()  ·L59: The inversions' upper T bound is ``backends.INVERSION_T_MAX``, read by
-- test_launch_demo_runs_span_wagner_against_coolprop()  ·L69: The notebook compares with CoolProp, whose CO2 is Span-Wagner: every
-- @pytest.mark.parametrize test_missing_tables_raise(eos, monkeypatch, tmp_path)  ·L84: A missing seed or chi table raises at the first call that needs it,
+- const SPAN_WAGNER_MODULES  ·L29
+- const SPAN_WAGNER_IMPORTERS  ·L33
+- _span_wagner_imports(source)  ·L36: Every import of a Span-Wagner module in ``source``, as text, in any form:
+- @pytest.mark.parametrize test_span_wagner_import_scan_sees_every_form(source)  ·L74
+- @pytest.mark.parametrize test_span_wagner_import_scan_passes_other_imports(source)  ·L84
+- test_span_wagner_content_lives_under_span_wagner_names()  ·L88: Only a module named for Span-Wagner, the registry ``backends`` and
+- test_docs_state_the_current_state()  ·L103
+- test_generic_modules_describe_every_backend()  ·L111
+- test_inversion_temperature_ceiling_has_one_home()  ·L121: The inversions' upper T bound is ``backends.INVERSION_T_MAX``, read by
+- test_launch_demo_runs_span_wagner_against_coolprop()  ·L131: The notebook compares with CoolProp, whose CO2 is Span-Wagner: every
+- @pytest.mark.parametrize test_missing_tables_raise(eos, monkeypatch, tmp_path)  ·L146: A missing seed or chi table raises at the first call that needs it,
+- @pytest.mark.parametrize test_missing_saturation_table_raises(eos, monkeypatch, tmp_path)  ·L163: ``inversions._build`` tolerates an absent saturation table (the table
 
 ### tests/test_inversion_gradients.py
 _Forward-mode (jvp) and reverse-mode (grad/vjp) gradients through every inversion._

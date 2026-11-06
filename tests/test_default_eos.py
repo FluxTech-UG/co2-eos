@@ -4,6 +4,7 @@ A call with no ``eos`` argument is the same computation as the call that names
 ``"nist2026"``: the same compiled kernel, so the same bits.
 """
 import inspect
+import types
 
 import jax
 import jax.numpy as jnp
@@ -44,18 +45,41 @@ def test_batched_transport_names_its_backend():
                                   T, rho, eos=ce.SPAN_WAGNER))
 
 
-def test_generic_constants_are_the_default_surface():
-    """A public constant of a submodule that a backend surface also carries
-    is the default surface's value: no generic name holds Span-Wagner's."""
-    from co2_eos import backends, core, inversions, saturation, transport
+def _surface_constants():
+    """The public constant names a CO2 backend's surface carries (TC, PC, M, ...)."""
+    from co2_eos import backends
+    names = set()
+    for eos in ce.CO2_EOS_NAMES:
+        surface = backends.get(eos).surface
+        names |= {n for n in dir(surface) if n.isupper() and not n.startswith("_")}
+    return names
+
+
+def _off_default_constants(modules):
+    """Each ``module.NAME`` that shares a surface constant's name and differs
+    from the default surface's value."""
+    from co2_eos import backends
     surface = backends.get(ce.DEFAULT_EOS).surface
-    checked = 0
-    for mod in (core, inversions, transport, saturation):
-        for name in dir(mod):
-            if name.isupper() and not name.startswith("_") and hasattr(surface, name):
-                checked += 1
-                assert getattr(mod, name) == getattr(surface, name), \
-                    f"{mod.__name__}.{name}"
+    return [f"{getattr(mod, '__name__', mod)}.{name}"
+            for mod in modules for name in sorted(_surface_constants())
+            if hasattr(mod, name) and getattr(mod, name) != getattr(surface, name)]
+
+
+def test_generic_constants_are_the_default_surface():
+    """No generic name holds a Span-Wagner constant.
+
+    A forward guard: today no generic submodule nor the package binds a
+    surface constant's name at all (the constants are reached through
+    ``critical_point``, ``triple_point`` or a backend's surface), so the scan
+    finds nothing to compare.  A constant added under a generic name must be
+    the default surface's value; the planted case below shows the scan sees one.
+    """
+    from co2_eos import core, inversions, saturation, span_wagner, transport
+    assert {"TC", "PC", "RHOC", "M", "R", "T_TRIPLE"} <= _surface_constants()
+    offenders = _off_default_constants((ce, core, inversions, transport, saturation))
+    assert not offenders, f"generic names off the default surface: {offenders}"
+    planted = types.SimpleNamespace(__name__="planted", PC=span_wagner.PC)
+    assert _off_default_constants((planted,)) == ["planted.PC"]
     for name in ("TC", "PC", "M", "R_MOLAR", "RHOC_MOLAR"):
         assert not hasattr(transport, name), f"transport.{name}"
 
