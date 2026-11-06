@@ -37,18 +37,18 @@ _Baseline profiling of the co2-eos hot path (pre-redesign)._
 ### bench/profile_hotpath.py
 _Profile INSIDE properties_from_rho_u: where the per-eval microseconds go._
 - const _EOS  ·L51
-- const _ITERS  ·L54
-- const NS  ·L56
-- const REPEAT  ·L57
-- envelope(n, seed=0)  ·L63: (T, rho, u) sampled uniformly in the consumers' operating box.
-- time_call(fn, *args, repeat=REPEAT)  ·L72: Compile + warm up, then median seconds/call over `repeat` runs.
-- @jax.jit f_bundle(tau, delta)  ·L95
-- const _TAU_REF  ·L99
-- @jax.jit f_chi_ref(delta)  ·L103: Exactly the extra Helmholtz work the critical enhancement does.
-- const _OPS  ·L110
-- hlo_census(fn, *args)  ·L114: Count transcendental-ish ops in the optimized HLO of fn(*args).
-- newton_convergence(n=20000, seed=7)  ·L126: |T_k - T_true| percentiles after k fixed Newton steps from the table seed.
-- main()  ·L156
+- const _ITERS  ·L53
+- const NS  ·L55
+- const REPEAT  ·L56
+- envelope(n, seed=0)  ·L62: (T, rho, u) sampled uniformly in the consumers' operating box.
+- time_call(fn, *args, repeat=REPEAT)  ·L71: Compile + warm up, then median seconds/call over `repeat` runs.
+- @jax.jit f_bundle(tau, delta)  ·L94
+- const _TAU_REF  ·L98
+- @jax.jit f_chi_ref(delta)  ·L102: Exactly the extra Helmholtz work the critical enhancement does.
+- const _OPS  ·L109
+- hlo_census(fn, *args)  ·L113: Count transcendental-ish ops in the optimized HLO of fn(*args).
+- newton_convergence(n=20000, seed=7)  ·L125: |T_k - T_true| percentiles after k fixed Newton steps from the table seed.
+- main()  ·L155
 
 ### bench/proto_chebsurf.py
 _Prototype D probe: can a tensor-Chebyshev surface replace the residual sum?_

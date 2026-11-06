@@ -50,7 +50,6 @@ from co2_eos import core as _core_mod
 # kernel).
 _EOS = co2_eos.SPAN_WAGNER
 core = _core_mod.for_eos(_EOS)
-_tr_sw = tr.for_eos(_EOS)
 _ITERS = _core_mod._NEWTON_ITERS_TABLE[_EOS]
 
 NS = [64, 128, 256, 1024]
@@ -88,7 +87,7 @@ f_newton = partial(co2_eos.temperature_from_rho_u, eos=_EOS)
 f_seed = jax.jit(jax.vmap(core._seed_T))
 f_state_Trho = jax.jit(jax.vmap(core._state_from_T_rho))
 f_thermo = jax.jit(jax.vmap(core._thermo))
-f_visc = jax.jit(jax.vmap(_tr_sw._scalar_viscosity))
+f_visc = partial(tr.viscosity, eos=_EOS)
 
 
 @jax.jit
