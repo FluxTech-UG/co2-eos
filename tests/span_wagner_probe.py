@@ -113,9 +113,10 @@ put("grad/state_from_Ph/temperature", jax.vmap(jax.grad(
     lambda p, h: ce.state_from_Ph(p, h)["temperature"], argnums=(0, 1)))(PH, HH))
 put("grad/saturation_pressure", jax.vmap(jax.grad(ce.saturation_pressure))(TS))
 
-# The submodules' module-level names are the Span-Wagner instance: called with
+# The submodules' module-level names (core's hot path among them) are the
+# Span-Wagner instance: called with
 # no ``eos`` on both sides, as a consumer importing from them calls them.
-from co2_eos import inversions as _inv, saturation as _sat, transport as _tr
+from co2_eos import core as _core, inversions as _inv, saturation as _sat, transport as _tr
 
 for name in ("saturation_pressure", "saturation_densities",
              "saturation_entropies"):
@@ -128,6 +129,8 @@ put("inversions.density_from_PT", _inv.density_from_PT(TP, PP, h))
 put("inversions.state_from_Ph", _inv.state_from_Ph(
     PH, HH, jnp.full(PH.shape, _ce.AUTO, dtype=jnp.int32)))
 put("inversions.temperature_from_Du", _inv.temperature_from_Du(
+    RR, U, jnp.full(RR.shape, _ce.AUTO, dtype=jnp.int32)))
+put("core._state_from_rho_u", jax.vmap(_core._state_from_rho_u)(
     RR, U, jnp.full(RR.shape, _ce.AUTO, dtype=jnp.int32)))
 put("transport.viscosity", _tr.viscosity(TT, RR))
 put("transport.thermal_conductivity", _tr.thermal_conductivity(TT, RR))

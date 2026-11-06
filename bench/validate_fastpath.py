@@ -1,5 +1,6 @@
 """Validation harness: the fast (ρ, u) path vs an independent reference chain.
 
+Fast path = the public API with ``eos="span_wagner"``.
 Reference = the Span-Wagner oracle (``span_wagner``'s autodiff derivatives of
 α) plus the transport correlations written straight from the papers with
 plain ``pow`` calls, sharing NO code with the economized ``helmholtz`` /
@@ -33,6 +34,10 @@ jax.config.update("jax_enable_x64", True)
 import co2_eos
 from co2_eos import span_wagner as sw
 from co2_eos import saturation as sat
+
+# The fast path under test is the Span-Wagner backend, the reference chain's
+# own equation of state.
+_EOS = co2_eos.SPAN_WAGNER
 
 # ═════════════════════════════════════════════════════════════════════════
 # Independent reference chain (span_wagner autodiff + literal correlations)
@@ -198,7 +203,7 @@ def envelope_single_phase(n, seed=17):
         rng.uniform(60.0, 700.0, n - 2 * n_ring),
         rng.uniform(380.0, 560.0, n_ring),
         467.6 + rng.uniform(-30.0, 30.0, n_ring),
-        [co2_eos.density_from_PT(6.736e6, 316.65)],  # spec point rho
+        [co2_eos.density_from_PT(6.736e6, 316.65, eos=_EOS)],  # spec point rho
     ])
     rl, rv = sat.saturation_densities(jnp.asarray(np.clip(T, 220.0, 304.0)))
     dome = (T < sw.TC) & (rho > np.asarray(rv)) & (rho < np.asarray(rl))
@@ -232,7 +237,7 @@ def main():
     rho, u, _ = envelope_single_phase(args.n)
     print(f"envelope samples (single-phase): {rho.shape[0]}")
 
-    fast = co2_eos.properties_from_rho_u(rho, u)
+    fast = co2_eos.properties_from_rho_u(rho, u, eos=_EOS)
     ref = jax.jit(jax.vmap(reference_state))(rho, u)
 
     print("\nProperty values, fast path vs independent oracle chain:")
@@ -249,7 +254,7 @@ def main():
 
     def fast_scalar(q):
         def f(r, uu):
-            st = co2_eos.state_from_Du(r, uu)
+            st = co2_eos.state_from_Du(r, uu, eos=_EOS)
             if q in st:
                 return st[q]
             raise KeyError(q)

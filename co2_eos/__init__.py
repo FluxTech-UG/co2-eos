@@ -3,8 +3,9 @@
 Pure-JAX Helmholtz equations of state for carbon dioxide with hand-coded
 analytic α-derivatives.  JIT-compilable, ``vmap``-able, fully differentiable.
 
-Two backends, selected by the keyword ``eos`` every public function takes (a
-Python string, static under ``jax.jit``: one compiled kernel per backend)::
+Five backends, selected by the keyword ``eos`` every public function takes (a
+Python string, static under ``jax.jit``: one compiled kernel per backend).
+Two are CO₂ equations of state::
 
     eos="nist2026"      Lemmon, Harvey & Hellmann, NIST IR 8608 (2026), the
                         default: 24 terms, no nonanalytic terms, free of

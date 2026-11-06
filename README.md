@@ -91,7 +91,7 @@ If you're building CO₂ system models in Python and need thermodynamic properti
 
 But CoolProp is a C++ library with Python bindings. You can't `jax.grad` through it. You can't JIT-compile a simulation loop that calls it. And the per-call overhead from the Python↔C++ boundary adds up fast in tight integration loops.
 
-CO2-EOS solves this for CO₂ by implementing the same reference EOS (Span-Wagner 1996) directly in JAX:
+CO2-EOS solves this for CO₂ by implementing the reference equations of state directly in JAX: NIST IR 8608 (2026, `eos="nist2026"`, the default) and Span-Wagner 1996 (`eos="span_wagner"`, the EOS CoolProp implements):
 
 - **Differentiable.** `jax.grad` through any property, any inversion, any combination. No finite differences. The inversions carry hand-written `custom_jvp` rules (implicit function theorem), so forward- and reverse-mode gradients are exact and cheap; validated against central finite differences.
 - **Fast.** JIT-compiled and vectorisable, with hand-coded, transcendental-economized analytic α-derivatives: the Span-Wagner exponent structure (¼-integer τ-powers, integer δ-powers, shared exponential envelopes) is evaluated by sqrt/multiply ladders, so a full six-derivative bundle costs ~12 exps + 3 pows per point instead of ~150 array-exponent pows: the same arithmetic, re-associated, exact to round-off. For simulation codes that carry `(ρ, u)` as conserved variables, `properties_from_rho_u` fuses the whole primitive recovery: a dome-safe table seed plus unrolled analytic-Cv Newton steps (three on Span-Wagner, five on nist2026) recover `T(ρ, u)` to 1e-12 K, and one shared derivative bundle feeds every property including the transport critical enhancement. Measured on Span-Wagner: on an Apple M2 Pro (float64) the full recovery runs **123 µs for a 64-point batch and 0.53 µs/point at large batches, 7.6–19.9× faster than the v0.1 autodiff path** and 2.6–6.3× faster than v0.2. On an OVH Tesla V100S the inversion reaches **63.7×** vs v0.1 at a 2²⁰-point batch (2 ns/point; full recovery 16 ns/point), and the launch-latency floor at small batches dropped ~1.7× (`bench/compare.py`, `bench/PROFILING.md`, validation in `docs/validation-fastpath-2026-07.md`).
@@ -101,7 +101,7 @@ CO2-EOS solves this for CO₂ by implementing the same reference EOS (Span-Wagne
 
 ## What's included
 
-**Equation of state**: Full Span-Wagner (1996) formulation for CO₂. Helmholtz free energy as A(T, ρ), with all thermodynamic properties derived from hand-coded analytic α-derivatives (validated against `jax.grad` to < 3e-12):
+**Equations of state**: two full formulations for CO₂, NIST IR 8608 (Lemmon, Harvey and Hellmann 2026, `eos="nist2026"`, the default) and Span-Wagner (1996, `eos="span_wagner"`). On each, the Helmholtz free energy is A(T, ρ), with all thermodynamic properties derived from hand-coded analytic α-derivatives (validated against `jax.grad`: Span-Wagner to < 3e-12, NIST IR 8608 to 1e-9 for the residual part and 1e-10 for the ideal part, `tests/test_nist2026_derivs.py`):
 
 - Pressure, internal energy, enthalpy, entropy
 - Isochoric and isobaric heat capacities (Cv, Cp)
@@ -167,11 +167,13 @@ Notes:
 
 ## Valid range
 
-CO2-EOS covers the full fluid region of the Span-Wagner EOS:
+On `eos="span_wagner"`, CO2-EOS covers the full fluid region of the Span-Wagner EOS:
 
 - **Temperature:** 216.6 K (triple point) to 1100 K
 - **Pressure:** up to 800 MPa
 - **Saturation curve:** triple point to within 1 mK of the critical point (304.1282 K, 7.3773 MPa)
+
+On `eos="nist2026"` (the default), the equation is checked against the values NIST IR 8608 prints (`tests/test_nist2026_verification.py`) and against Span-Wagner over 230 to 800 K and 0.05 to 100 MPa away from the critical point (`tests/test_nist2026_vs_span_wagner.py`), with its own saturation table and triple point (216.5909 K).
 
 Transport properties follow the valid ranges of their respective correlations (broadly: gas and liquid up to 100 MPa, with reduced accuracy in the immediate critical region for thermal conductivity).
 
@@ -210,7 +212,7 @@ CO2-EOS is validated against CoolProp across the full valid range. The test suit
 - Inversions (P,T → ρ), (P,h → state), (ρ,u → state) including near-critical conditions
 - Comparison of all Helmholtz derivatives against CoolProp's analytical values
 
-Both libraries implement the same Span-Wagner polynomial and the same reference transport correlations, so empirical agreement across the validation grid is at machine precision for the primary quantities and only loosens where physics (not formulation) amplifies floating-point noise:
+On `eos="span_wagner"`, both libraries implement the same Span-Wagner polynomial and the same reference transport correlations, so empirical agreement across the validation grid is at machine precision for the primary quantities and only loosens where physics (not formulation) amplifies floating-point noise:
 
 - **Density and viscosity:** below 10⁻¹² relative error everywhere on the grid (limited by floating-point evaluation order).
 - **cp, speed of sound, thermal conductivity:** below 10⁻⁹ in the bulk; up to a few × 10⁻⁸ for the speed of sound near the Widom line and within ~10 % of the saturation curve, and up to a few × 10⁻⁶ for cp at the very tip of its peak just above the critical pressure. There the inversion's residual ρ-error is amplified through ∂q/∂ρ, which is locally enormous (cp climbs above 30,000 J/(kg·K) at the peak, so a ~0.1 J/(kg·K) absolute difference still rounds to ~10⁻⁶ relative); at the same (T, ρ) the underlying polynomials still agree at machine precision.

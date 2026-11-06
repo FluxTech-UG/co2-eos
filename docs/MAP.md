@@ -36,17 +36,18 @@ _Baseline profiling of the co2-eos hot path (pre-redesign)._
 
 ### bench/profile_hotpath.py
 _Profile INSIDE properties_from_rho_u: where the per-eval microseconds go._
-- const NS  ·L44
-- const REPEAT  ·L45
-- envelope(n, seed=0)  ·L51: (T, rho, u) sampled uniformly in the consumers' operating box.
-- time_call(fn, *args, repeat=REPEAT)  ·L60: Compile + warm up, then median seconds/call over `repeat` runs.
-- @jax.jit f_bundle(tau, delta)  ·L83
-- const _TAU_REF  ·L87
-- @jax.jit f_chi_ref(delta)  ·L91: Exactly the extra Helmholtz work the critical enhancement does.
-- const _OPS  ·L98
-- hlo_census(fn, *args)  ·L102: Count transcendental-ish ops in the optimized HLO of fn(*args).
-- newton_convergence(n=20000, seed=7)  ·L114: |T_k - T_true| percentiles after k fixed Newton steps from the table seed.
-- main()  ·L144
+- const NS  ·L46
+- const REPEAT  ·L47
+- envelope(n, seed=0)  ·L53: (T, rho, u) sampled uniformly in the consumers' operating box.
+- time_call(fn, *args, repeat=REPEAT)  ·L62: Compile + warm up, then median seconds/call over `repeat` runs.
+- const _EOS  ·L78
+- @jax.jit f_bundle(tau, delta)  ·L88
+- const _TAU_REF  ·L92
+- @jax.jit f_chi_ref(delta)  ·L96: Exactly the extra Helmholtz work the critical enhancement does.
+- const _OPS  ·L103
+- hlo_census(fn, *args)  ·L107: Count transcendental-ish ops in the optimized HLO of fn(*args).
+- newton_convergence(n=20000, seed=7)  ·L119: |T_k - T_true| percentiles after k fixed Newton steps from the table seed.
+- main()  ·L149
 
 ### bench/proto_chebsurf.py
 _Prototype D probe: can a tensor-Chebyshev surface replace the residual sum?_
@@ -139,54 +140,55 @@ _Validate the redesigned core: round-trip, properties, seed/iteration count._
 
 ### bench/validate_fastpath.py
 _Validation harness: the fast (ρ, u) path vs an independent reference chain._
-- _T_from_rho_u_ref(rho, u)  ·L45: To-convergence Newton on the oracle u(T, ρ); crude seed, no table.
-- const _A0  ·L66
-- const _RF_B  ·L69
-- const _RF_T  ·L71
-- const _LAM0_L  ·L72
-- const _LAM_B  ·L73
-- const _M  ·L77
-- const _R_MOLAR  ·L78
-- const _RHOC_MOLAR  ·L79
-- const _PC  ·L80
-- const _TT_TRIPLE  ·L81
-- const _RHO_TL  ·L82
-- const _ETA_TL  ·L83
-- _visc_ref(T, rho)  ·L86
-- _cond_ref(T, rho, mu)  ·L104
-- reference_state(rho, u)  ·L143: Full reference state dict at scalar (ρ, u) from the oracle chain.
-- reference_derivs(rho, u, qname)  ·L164
-- envelope_single_phase(n, seed=17)  ·L188
-- const QUANTITIES  ·L210
-- rel(a, b, floor)  ·L214
-- const FLOORS  ·L221
-- main()  ·L226
+- const _EOS  ·L40
+- _T_from_rho_u_ref(rho, u)  ·L50: To-convergence Newton on the oracle u(T, ρ); crude seed, no table.
+- const _A0  ·L71
+- const _RF_B  ·L74
+- const _RF_T  ·L76
+- const _LAM0_L  ·L77
+- const _LAM_B  ·L78
+- const _M  ·L82
+- const _R_MOLAR  ·L83
+- const _RHOC_MOLAR  ·L84
+- const _PC  ·L85
+- const _TT_TRIPLE  ·L86
+- const _RHO_TL  ·L87
+- const _ETA_TL  ·L88
+- _visc_ref(T, rho)  ·L91
+- _cond_ref(T, rho, mu)  ·L109
+- reference_state(rho, u)  ·L148: Full reference state dict at scalar (ρ, u) from the oracle chain.
+- reference_derivs(rho, u, qname)  ·L169
+- envelope_single_phase(n, seed=17)  ·L193
+- const QUANTITIES  ·L215
+- rel(a, b, floor)  ·L219
+- const FLOORS  ·L226
+- main()  ·L231
 
 ### co2_eos/__init__.py
 _CO2-EOS: Differentiable CO₂ thermodynamic properties in JAX._
-- const LIQUID  ·L95
-- const VAPOR  ·L96
-- const SUPERCRITICAL  ·L97
-- const AUTO  ·L98
-- saturation_pressure(T, eos=DEFAULT_EOS)  ·L117: Saturation pressure P_sat [Pa] at temperature T [K].
-- saturation_temperature(P, eos=DEFAULT_EOS)  ·L122: Saturation temperature T_sat [K] at pressure P [Pa].
-- saturation_densities(T, eos=DEFAULT_EOS)  ·L127: Saturated (rho_l, rho_v) [kg/m³] at temperature T [K].
-- saturation_densities_P(P, eos=DEFAULT_EOS)  ·L132: Saturated (rho_l, rho_v) [kg/m³] at pressure P [Pa].
-- saturation_enthalpies(T, eos=DEFAULT_EOS)  ·L137: Saturated (h_l, h_v) [J/kg] at temperature T [K].
-- saturation_enthalpies_P(P, eos=DEFAULT_EOS)  ·L142: Saturated (h_l, h_v) [J/kg] at pressure P [Pa].
-- saturation_entropies(T, eos=DEFAULT_EOS)  ·L147: Saturated (s_l, s_v) [J/(kg·K)] at temperature T [K].
-- saturation_entropies_P(P, eos=DEFAULT_EOS)  ·L152: Saturated (s_l, s_v) [J/(kg·K)] at pressure P [Pa].
-- @_jit viscosity(T, rho, eos=DEFAULT_EOS)  ·L161: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
-- @_jit thermal_conductivity(T, rho, eos=DEFAULT_EOS)  ·L173: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
-- @_jit bulk_viscosity(T, rho, eos=DEFAULT_EOS)  ·L181: Bulk viscosity ζ [Pa·s] at scalar (T, ρ). vmap for batches.
-- @_jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L199: Full thermodynamic + transport state from (ρ, u). Batched.
-- @_jit properties_from_rho_T(rho, T, eos=DEFAULT_EOS)  ·L229: Full thermodynamic + transport state from (ρ, T). Batched.
-- @_jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L258: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
-- @_jit properties(T, rho, eos=DEFAULT_EOS)  ·L278: Full thermodynamic + transport state at scalar (T, ρ).
-- @_jit state_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L289: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
-- @_jit density_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L304: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
-- @_jit state_from_Ph(P, h, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L313: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
-- @_jit state_from_Du(rho, u, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L329: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
+- const LIQUID  ·L96
+- const VAPOR  ·L97
+- const SUPERCRITICAL  ·L98
+- const AUTO  ·L99
+- saturation_pressure(T, eos=DEFAULT_EOS)  ·L118: Saturation pressure P_sat [Pa] at temperature T [K].
+- saturation_temperature(P, eos=DEFAULT_EOS)  ·L123: Saturation temperature T_sat [K] at pressure P [Pa].
+- saturation_densities(T, eos=DEFAULT_EOS)  ·L128: Saturated (rho_l, rho_v) [kg/m³] at temperature T [K].
+- saturation_densities_P(P, eos=DEFAULT_EOS)  ·L133: Saturated (rho_l, rho_v) [kg/m³] at pressure P [Pa].
+- saturation_enthalpies(T, eos=DEFAULT_EOS)  ·L138: Saturated (h_l, h_v) [J/kg] at temperature T [K].
+- saturation_enthalpies_P(P, eos=DEFAULT_EOS)  ·L143: Saturated (h_l, h_v) [J/kg] at pressure P [Pa].
+- saturation_entropies(T, eos=DEFAULT_EOS)  ·L148: Saturated (s_l, s_v) [J/(kg·K)] at temperature T [K].
+- saturation_entropies_P(P, eos=DEFAULT_EOS)  ·L153: Saturated (s_l, s_v) [J/(kg·K)] at pressure P [Pa].
+- @_jit viscosity(T, rho, eos=DEFAULT_EOS)  ·L162: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
+- @_jit thermal_conductivity(T, rho, eos=DEFAULT_EOS)  ·L174: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
+- @_jit bulk_viscosity(T, rho, eos=DEFAULT_EOS)  ·L182: Bulk viscosity ζ [Pa·s] at scalar (T, ρ). vmap for batches.
+- @_jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L200: Full thermodynamic + transport state from (ρ, u). Batched.
+- @_jit properties_from_rho_T(rho, T, eos=DEFAULT_EOS)  ·L230: Full thermodynamic + transport state from (ρ, T). Batched.
+- @_jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L259: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
+- @_jit properties(T, rho, eos=DEFAULT_EOS)  ·L279: Full thermodynamic + transport state at scalar (T, ρ).
+- @_jit state_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L290: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
+- @_jit density_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L305: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
+- @_jit state_from_Ph(P, h, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L314: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
+- @_jit state_from_Du(rho, u, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L330: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
 
 ### co2_eos/backends.py
 _The equation-of-state backends and the static switch that selects one._

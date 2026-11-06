@@ -1,6 +1,7 @@
 """Profile INSIDE properties_from_rho_u: where the per-eval microseconds go.
 
-Components timed separately (all jitted, vmapped over the batch, float64):
+Components timed separately on the Span-Wagner backend (all jitted, vmapped
+over the batch, float64):
 
   full        properties_from_rho_u(rho, u)            the consumer hot path
   newton      temperature_from_rho_u(rho, u)           seed + 5 fixed Newton steps
@@ -28,6 +29,7 @@ import argparse
 import json
 import re
 import time
+from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -71,8 +73,11 @@ def time_call(fn, *args, repeat=REPEAT):
 
 # ── Component kernels (jit + vmap over the batch) ───────────────────────────
 
-f_full = co2_eos.properties_from_rho_u
-f_newton = co2_eos.temperature_from_rho_u
+# The public calls run the Span-Wagner backend, the one the component kernels
+# below (``core``'s and ``transport``'s module-level names) are.
+_EOS = co2_eos.SPAN_WAGNER
+f_full = partial(co2_eos.properties_from_rho_u, eos=_EOS)
+f_newton = partial(co2_eos.temperature_from_rho_u, eos=_EOS)
 f_seed = jax.jit(jax.vmap(core._seed_T))
 f_state_Trho = jax.jit(jax.vmap(core._state_from_T_rho))
 f_thermo = jax.jit(jax.vmap(core._thermo))
@@ -195,8 +200,8 @@ def main():
     T, rho, u = envelope(64)
     census = {}
     for name, fn, fnargs in [
-        ("properties_from_rho_u N=64", lambda a, b: co2_eos.properties_from_rho_u(a, b), (rho, u)),
-        ("temperature_from_rho_u N=64", lambda a, b: co2_eos.temperature_from_rho_u(a, b), (rho, u)),
+        ("properties_from_rho_u N=64", lambda a, b: f_full(a, b), (rho, u)),
+        ("temperature_from_rho_u N=64", lambda a, b: f_newton(a, b), (rho, u)),
         ("state_from_T_rho N=64", lambda a, b: jax.vmap(core._state_from_T_rho)(a, b), (T, rho)),
     ]:
         c = hlo_census(fn, *fnargs)
