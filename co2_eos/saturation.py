@@ -2,12 +2,11 @@
 
 Loads a precomputed saturation table (cubic spline coefficients) generated
 by scripts/generate_saturation_table.py by a Maxwell construction on the
-selected backend's surface: ``saturation_table.npz`` for Span-Wagner,
-``saturation_table_nist2026.npz`` for ``eos="nist2026"``.  Every lookup takes
-the static keyword ``eos`` with the default ``DEFAULT_EOS`` (nist2026), like
-the other submodules' module-level names (``core``, ``inversions``,
-``transport``) and the package's public names; Span-Wagner is named,
-``eos="span_wagner"``.
+selected backend's surface, one table per CO₂ backend
+(``backends.table_path(eos, "saturation_table")``).  Every lookup takes the
+static keyword ``eos`` with the default ``DEFAULT_EOS`` (nist2026), like the
+other submodules' module-level names (``core``, ``inversions``,
+``transport``) and the package's public names; any other backend is named.
 
 All lookup functions use cubic spline interpolation and are fully
 differentiable and JIT-compilable. They accept scalar or array inputs.
@@ -82,8 +81,8 @@ def _eval_spline(x, breaks, coeffs):
 def saturation_pressure(T, eos=DEFAULT_EOS):
     """Saturation pressure P_sat [Pa] at temperature T [K].
 
-    Valid for T in [216.592, 304.127] K (triple point to near-critical).
-    JIT-compilable and differentiable.
+    Valid from the backend's triple point (its surface's ``T_TRIPLE``) to
+    within about 1 mK of its T_c.  JIT-compilable and differentiable.
     """
     tab = _table(eos)
     return _eval_spline(T, tab['T_breaks'], tab['P_sat_c'])

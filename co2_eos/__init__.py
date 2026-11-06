@@ -72,14 +72,16 @@ Transport (scalar; vmap for batches)::
     thermal_conductivity(T, rho)    → λ  [W/(m·K)]
     bulk_viscosity(T, rho)          → ζ  [Pa·s]  (vibrational + critical)
 
+Fixed points of the selected backend's surface (Python floats)::
+
+    critical_point()                → (T_c [K], p_c [Pa], ρ_c [kg/m³])
+    triple_point()                  → T_t [K]  (CO₂ backends; a reference gas raises)
+
 Every function above also takes ``eos=`` (default ``"nist2026"``, ``DEFAULT_EOS``).
 
 Phase hints::
 
     LIQUID = 0, VAPOR = 1, SUPERCRITICAL = 2 (alias: AUTO)
-
-See README "Migrating to v0.2" for the move from the old per-quantity calls to
-the fused ``properties_from_rho_u``.
 """
 
 from functools import partial
@@ -102,7 +104,7 @@ AUTO = SUPERCRITICAL  # alias: auto-pick in the dome / supercritical-style guess
 from co2_eos.backends import (EOS_NAMES, CO2_EOS_NAMES, REFERENCE_GAS_NAMES,
                               DEFAULT_EOS, SPAN_WAGNER, NIST2026, AIR, HELIUM,
                               ARGON)
-from co2_eos import span_wagner as _sw
+from co2_eos import backends as _backends
 from co2_eos import transport as _tr
 from co2_eos import saturation as _sat
 from co2_eos import inversions as _inv
@@ -110,6 +112,31 @@ from co2_eos import core as _core
 
 # jit with the backend name static: one compiled kernel per backend.
 _jit = partial(jax.jit, static_argnames=("eos",))
+
+# ── Fixed points of the backend's surface ──────────────────────────────────
+
+def critical_point(eos=DEFAULT_EOS):
+    """(T_c [K], p_c [Pa], ρ_c [kg/m³]) of backend ``eos``'s surface.
+
+    The backend's own constants: a caller that compares against the critical
+    point reads it here, so it follows the backend its properties come from.
+    """
+    surface = _backends.get(eos).surface
+    return (surface.TC, surface.PC, surface.RHOC)
+
+
+def triple_point(eos=DEFAULT_EOS):
+    """Triple-point temperature T_t [K] of CO₂ backend ``eos``.
+
+    A reference gas has no triple point in this package (no dome): raises.
+    """
+    backend = _backends.get(eos)
+    if not backend.has_dome:
+        raise ValueError(
+            f"eos {eos!r} is a reference gas: it has no triple point here; "
+            f"triple_point serves {CO2_EOS_NAMES}")
+    return backend.surface.T_TRIPLE
+
 
 # ── Saturation curve: the submodule's lookups at the package default ────────
 # ``saturation``'s own names and these both default to ``DEFAULT_EOS``.
@@ -342,6 +369,7 @@ __all__ = [
     "EOS_NAMES", "CO2_EOS_NAMES", "REFERENCE_GAS_NAMES", "DEFAULT_EOS",
     "SPAN_WAGNER", "NIST2026", "AIR", "HELIUM", "ARGON",
     "LIQUID", "VAPOR", "SUPERCRITICAL", "AUTO",
+    "critical_point", "triple_point",
     "properties_from_rho_u", "properties_from_rho_T", "temperature_from_rho_u",
     "properties",
     "state_from_PT", "state_from_Ph", "state_from_Du",

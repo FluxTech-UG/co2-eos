@@ -1,6 +1,6 @@
 """The hand-coded analytic Helmholtz derivatives must match jax.grad.
 
-``helmholtz.residual_derivs`` / ``ideal_derivs`` replace the jax.grad chain in
+``span_wagner_kernel.residual_derivs`` / ``ideal_derivs`` replace the jax.grad chain in
 the hot path; they have to reproduce the autodiff derivatives of
 ``span_wagner.alphar`` / ``alpha0`` across the regime and the near-critical
 stress region to ~1e-10.  The δ-precomputed fast path used by the Newton inner
@@ -14,7 +14,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from co2_eos import span_wagner as sw
-from co2_eos import helmholtz as hz
+from co2_eos import span_wagner_kernel as hz
 
 # Autodiff references
 _ar_d = jax.grad(sw.alphar, argnums=1)

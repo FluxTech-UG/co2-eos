@@ -133,9 +133,9 @@ def test_mean_free_path_switch_is_smooth_and_faithful():
     """The logistic switch tracks Lin & Trusler's hard switch at 896 kg/m³."""
     T = 300.0
     for rho in (100.0, 472.0, 722.0, 821.0):
-        n = rho / tr.M * tr._NA
+        n = rho / tr._CORR_M * tr._NA
         lam_dil = 1.0 / (np.sqrt(2.0) * np.pi * tr._SIGMA_HS ** 2 * n)
-        v = np.sqrt(8.0 * tr.R_MOLAR * T / (np.pi * tr.M))
+        v = np.sqrt(8.0 * tr._CORR_R_MOLAR * T / (np.pi * tr._CORR_M))
         hard = lam_dil / (v * tr._P11_A * np.exp(T / tr._P11_T))
         smooth = float(tr._vibrational_relaxation_time(T, rho))
         assert abs(smooth / hard - 1.0) < 1e-4, rho

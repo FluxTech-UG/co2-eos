@@ -16,7 +16,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 from co2_eos.span_wagner import TC, RHOC, R, T_TRIPLE
-from co2_eos import helmholtz as hz
+from co2_eos import span_wagner_kernel as hz
 from co2_eos import core as _core_mod
 
 core = _core_mod.for_eos("span_wagner")   # the Span-Wagner study

@@ -5,7 +5,7 @@ Harness: `bench/validate_fastpath.py`; CI subset: `tests/test_fastpath_validatio
 
 ## What is being validated against what
 
-The shipped hot path (`properties_from_rho_u` → economized `helmholtz`
+The shipped hot path (`properties_from_rho_u` → economized `span_wagner_kernel`
 kernels, 3-iteration table-seeded Newton, Chebyshev chi_ref, ladder
 transport) is compared against an **independent reference chain sharing no
 code with it**: temperature recovered by a to-convergence while-loop Newton

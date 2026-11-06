@@ -15,15 +15,16 @@ current symbol-level inventory. The shape:
 - `co2_eos/`: the importable package. `__init__.py` is the **public API surface**: the
   hot path `properties_from_rho_u(ρ, u)`, the scalar `state_from_Du`, `properties(T, ρ)`,
   `state_from_PT`, `state_from_Ph`, `density_from_PT`, `viscosity`,
-  `thermal_conductivity`, `bulk_viscosity`, and the phase constants. Internals: `span_wagner.py` (the EOS
-  and analytic α-derivatives), `helmholtz.py`, `core.py` (the fused (ρ, u)
+  `thermal_conductivity`, `bulk_viscosity`, `critical_point`, `triple_point`, and the phase
+  constants. Internals: `span_wagner.py` (the Span-Wagner EOS and its autodiff properties),
+  `span_wagner_kernel.py` (its analytic α-derivatives), `core.py` (the fused (ρ, u)
   primitive-recovery kernel), `inversions.py`, `saturation.py`, `transport.py`, and the
   precomputed saturation/seed tables in `co2_eos/data/`.
 - **Five backends, one static switch.** Every public function takes `eos=`, a Python string
   static under `jax.jit`: `"nist2026"` (the default, `DEFAULT_EOS` in `backends.py`; NIST
   IR 8608, Lemmon, Harvey and Hellmann 2026: `nist2026_data.py` holds its constants, cited
   by page, `nist2026.py` its α, analytic kernels and property functions), `"span_wagner"`
-  (`span_wagner.py` and `helmholtz.py`), and the reference gases `"air"`, `"helium"`, `"argon"`
+  (`span_wagner.py` and `span_wagner_kernel.py`), and the reference gases `"air"`, `"helium"`, `"argon"`
   (`reference_gases_data.py`, every coefficient cited by page; `reference_gases.py`, one
   virial Helmholtz form, no saturation dome, NaN outside `T_RANGE` and `P_MAX`).
   `CO2_EOS_NAMES` and `REFERENCE_GAS_NAMES` are the two groups, `EOS_NAMES` all five; code
@@ -35,7 +36,9 @@ current symbol-level inventory. The shape:
   `inversions.state_from_Ph`, `transport.thermal_conductivity`,
   `saturation.saturation_pressure`, ...) are the nist2026 instance. Span-Wagner is reached
   by its own name only: `eos="span_wagner"`, a submodule's `for_eos("span_wagner")`, the
-  `span_wagner` module and its analytic kernel `helmholtz`. Each backend carries its own R,
+  `span_wagner` module and its analytic kernel `span_wagner_kernel`. A module holding
+  Span-Wagner content carries the name (`tests/test_generic_names.py`); the transport
+  correlations' Span-Wagner reducing parameters are private (`transport._CORR_*`). Each backend carries its own R,
   M, ρ_c and tables (`<stem>_nist2026.npz`, from the scripts' `--eos`). `eos="span_wagner"`
   is bit for bit 0.5.0 (`tests/test_span_wagner_bit_for_bit.py`, live against a `git
   archive` of 0.5.0); keep it so until a release says otherwise. `tests/test_default_eos.py`

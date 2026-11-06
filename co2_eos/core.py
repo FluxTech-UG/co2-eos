@@ -1,8 +1,10 @@
-"""Redesigned high-performance EOS core: analytic derivatives, fused passes.
+"""The fused EOS core: analytic derivatives, one pass per state, every backend.
 
-This module is the fast path of co2-eos.  It replaces the ``jax.grad`` chain in
-``span_wagner`` / ``inversions`` with the hand-coded analytic derivatives in
-``helmholtz``, and fuses the simulation hot path into a single entry point:
+This module is the fast path of co2-eos, built once per backend by ``_build``
+over the same code; the module-level names are the ``DEFAULT_EOS`` instance
+(nist2026), and ``for_eos(name)`` returns any backend's.  It evaluates the
+selected backend's hand-coded analytic α-derivatives (its ``kernel`` in
+``backends``) and fuses the simulation hot path into a single entry point:
 
     properties_from_rho_u(rho, u, phase_hint) -> dict
 
@@ -11,17 +13,18 @@ thermodynamic and transport property.  This is the call a (ρ, ρu, E) finite
 volume code makes on every RHS evaluation.
 
 Design:
-  * The Newton inner loop touches only τ-derivatives (`helmholtz.residual_tau_*`)
-    with the δ-dependent envelopes precomputed once (they are loop-invariant at
-    fixed ρ): all u and Cv need at fixed density.
-  * A precomputed (ρ, u) → T₀ table (dome-safe, uniform grid) seeds Newton so
-    that a short FIXED, unrolled iteration (no `lax.while_loop`) reaches
-    float64 round-off, measured 8.5e-13 K max over the single-phase envelope
-    at 3 steps.  Fixed iteration keeps the GPU kernel uniform and branchless;
-    the table seed is purely a convergence accelerator (the polish sets
-    accuracy and the IFT JVP sets gradients), so it carries no accuracy or
-    differentiability risk.
-  * Gradients use the implicit function theorem via `custom_jvp`, with the
+  * The Newton inner loop touches only τ-derivatives (the kernel's
+    ``residual_tau_*``) with the δ-dependent envelopes precomputed once (they
+    are loop-invariant at fixed ρ): all u and Cv need at fixed density.
+  * A precomputed (ρ, u) → T₀ table per backend (dome-safe, uniform grid)
+    seeds Newton so that a short FIXED, unrolled iteration (no
+    ``lax.while_loop``) reaches float64 round-off over the single-phase
+    envelope; the step count is the backend's (``_NEWTON_ITERS_TABLE``, with
+    the measurement behind each).  Fixed iteration keeps the GPU kernel
+    uniform and branchless; the table seed is purely a convergence accelerator
+    (the polish sets accuracy and the IFT JVP sets gradients).  A backend
+    without its table raises at the first solve that needs it.
+  * Gradients use the implicit function theorem via ``custom_jvp``, with the
     Jacobian entries (Cv, ∂u/∂ρ) taken analytically, giving correct jvp and vjp.
 
 All functions are scalar in (T, ρ) / (ρ, u); the public wrappers in
@@ -49,13 +52,8 @@ from co2_eos import transport as _transport
 # so the 0.5.0 results hold bit for bit).  NIST IR 8608 needs 5: its c_v rises
 # more steeply within a few mK of T_c, and 3 steps leave up to 6e-5 K there,
 # 4 steps 6e-9 K, 5 steps 1e-13 K (40k envelope samples plus 4k within 2 K
-# of T_c at 420 to 520 kg/m³; test_nist2026_backend).  The affine fallback
-# seed is coarse (±tens of K), so it gets a longer fixed iteration.
+# of T_c at 420 to 520 kg/m³; test_nist2026_backend).
 _NEWTON_ITERS_TABLE = {_backends.SPAN_WAGNER: 3, _backends.NIST2026: 5}
-_NEWTON_ITERS_AFFINE = 8
-_T_MAX = 800.0
-
-
 
 
 def _build(eos):
@@ -74,19 +72,18 @@ def _build(eos):
     # A reference gas seeds and bounds its own Newton and guards its domain;
     # these are static choices, so the CO₂ kernels hold no trace of them.
     _reference_gas = not _b.has_dome
-    _T_LO, _T_HI = hz.T_CLIP if _reference_gas else (_b.surface.T_TRIPLE, _T_MAX)
+    _T_LO, _T_HI = (hz.T_CLIP if _reference_gas
+                    else (_b.surface.T_TRIPLE, _backends.INVERSION_T_MAX))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # (ρ, u) → T₀ seed table  (bilinear; convergence accelerator only)
     # ═══════════════════════════════════════════════════════════════════════════
     # Loaded eagerly at import (outside any JIT trace) so the arrays are captured as
-    # constants.  Tolerant of a missing file so scripts/generate_seed_table.py can
-    # import this module to BUILD the table; in that case the affine fallback seed
-    # is used (the table is never needed to evaluate u/Cv).
+    # constants.  A missing file is tolerated at build time, since
+    # scripts/generate_seed_table.py imports this module to build the table (it
+    # needs only u and Cv); the first solve that needs the seed raises.
 
     _SEED_PATH = _backends.table_path(eos, "seed_table")
-    # Affine fallback seed T0 = a + b·u (regime fit), used if the table is absent.
-    _AFFINE_A, _AFFINE_B = 255.6, 1.656e-4
 
     _HAVE_SEED = False
     _T_MIN = _T_LO
@@ -124,7 +121,9 @@ def _build(eos):
         if _reference_gas:
             return hz.seed_T(rho, u)
         if not _HAVE_SEED:
-            return jnp.clip(_AFFINE_A + _AFFINE_B * u, _T_MIN, _T_HI)
+            raise FileNotFoundError(
+                f"{_SEED_PATH} is missing: build it with "
+                f"python scripts/generate_seed_table.py --eos {eos}")
         fi = jnp.clip((rho - _SEED_R_LO) / _SEED_R_STEP, 0.0,
                       _SEED_NRHO - 1 - 1e-9)
         fj = jnp.clip((u - _SEED_U_LO) / _SEED_U_STEP, 0.0, _SEED_NU - 1 - 1e-9)
@@ -216,7 +215,7 @@ def _build(eos):
         if _reference_gas:
             iters = hz.NEWTON_ITERS
         else:
-            iters = _NEWTON_ITERS_TABLE[eos] if _HAVE_SEED else _NEWTON_ITERS_AFFINE
+            iters = _NEWTON_ITERS_TABLE[eos]
 
         for _ in range(iters):
             tau = TC / T
@@ -351,6 +350,7 @@ for _eos in _backends.EOS_NAMES:
 _DEFAULT = for_eos(_backends.DEFAULT_EOS)
 _HAVE_SEED = _DEFAULT._HAVE_SEED
 _T_MIN = _DEFAULT._T_MIN
+_T_MAX = _DEFAULT._T_MAX
 _seed_T = _DEFAULT._seed_T
 _thermo = _DEFAULT._thermo
 _u_and_cv = _DEFAULT._u_and_cv

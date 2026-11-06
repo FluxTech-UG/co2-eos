@@ -115,15 +115,14 @@ put("grad/saturation_pressure", jax.vmap(jax.grad(ce.saturation_pressure))(TS))
 
 # The submodules' kernels: 0.5.0's module-level names (its only backend), and
 # here each submodule's ``for_eos(<name>)`` instance, the same names bound to
-# the backend.  The transport entry points are jit(vmap(scalar)), as 0.5.0's.
+# the backend, and ``transport``'s batched functions with ``eos`` named.
 from co2_eos import core as _core, inversions as _inv, saturation as _sat, transport as _tr
 if _EOS is not None:
     _core, _inv, _sat = (m.for_eos(_EOS) for m in (_core, _inv, _sat))
-    _trk = _tr.for_eos(_EOS)
+    _trm = _tr
     _tr = _Api()
     for _name in ("viscosity", "thermal_conductivity", "bulk_viscosity"):
-        setattr(_tr, _name,
-                jax.jit(jax.vmap(getattr(_trk, f"_scalar_{_name}"))))
+        setattr(_tr, _name, partial(getattr(_trm, _name), eos=_EOS))
 
 for name in ("saturation_pressure", "saturation_densities",
              "saturation_entropies"):

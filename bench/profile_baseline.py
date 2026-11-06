@@ -30,6 +30,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 from co2_eos import span_wagner as sw
+from functools import partial
 from types import SimpleNamespace
 
 from co2_eos import transport as _tr_mod
@@ -38,10 +39,9 @@ from co2_eos.inversions import SUPERCRITICAL
 
 # Every call is on the Span-Wagner backend.
 temperature_from_Du = _inv_mod.for_eos("span_wagner").temperature_from_Du
-_tr_sw = _tr_mod.for_eos("span_wagner")
 tr = SimpleNamespace(
-    viscosity=jax.jit(jax.vmap(_tr_sw._scalar_viscosity)),
-    thermal_conductivity=jax.jit(jax.vmap(_tr_sw._scalar_thermal_conductivity)))
+    viscosity=partial(_tr_mod.viscosity, eos="span_wagner"),
+    thermal_conductivity=partial(_tr_mod.thermal_conductivity, eos="span_wagner"))
 
 NS = [64, 256, 1024, 4096]
 REPEAT = 50  # timed repetitions per measurement

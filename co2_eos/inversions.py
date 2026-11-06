@@ -35,7 +35,7 @@ TOL = 1e-10
 def _build(eos):
     """The inversions on backend ``eos``, returned as a namespace.
 
-    ``sw`` is the backend's surface (constants and scalar property functions)
+    ``surf`` is the backend's surface (constants and scalar property functions)
     and ``sat`` its saturation lookups; the body is the same code for every
     backend.  Every backend is built at import, outside any trace, so each
     saturation table is loaded as a concrete constant (a table first loaded
@@ -46,7 +46,8 @@ def _build(eos):
     """
     if not _backends.get(eos).has_dome:
         return _backends.get(eos).kernel.inversions
-    sw = _backends.get(eos).surface
+    surf = _backends.get(eos).surface
+    _T_MAX = _backends.INVERSION_T_MAX
     sat = _saturation.for_eos(eos)
     try:
         sat._ensure_loaded()
@@ -55,13 +56,13 @@ def _build(eos):
 
     # ── Pressure and its density-derivative (scalar) ─────────────────────────
 
-    _dP_drho = jax.grad(sw._scalar_pressure, argnums=1)
-    _d2P_drho2 = jax.grad(jax.grad(sw._scalar_pressure, argnums=1), argnums=1)
-    _dP_dT = jax.grad(sw._scalar_pressure, argnums=0)
-    _dh_dT = jax.grad(sw._scalar_enthalpy, argnums=0)
-    _dh_drho = jax.grad(sw._scalar_enthalpy, argnums=1)
-    _du_dT = jax.grad(sw._scalar_internal_energy, argnums=0)
-    _du_drho = jax.grad(sw._scalar_internal_energy, argnums=1)
+    _dP_drho = jax.grad(surf._scalar_pressure, argnums=1)
+    _d2P_drho2 = jax.grad(jax.grad(surf._scalar_pressure, argnums=1), argnums=1)
+    _dP_dT = jax.grad(surf._scalar_pressure, argnums=0)
+    _dh_dT = jax.grad(surf._scalar_enthalpy, argnums=0)
+    _dh_drho = jax.grad(surf._scalar_enthalpy, argnums=1)
+    _du_dT = jax.grad(surf._scalar_internal_energy, argnums=0)
+    _du_drho = jax.grad(surf._scalar_internal_energy, argnums=1)
 
 
     # ── Phase-aware initial guess ─────────────────────────────────────────────
@@ -69,9 +70,10 @@ def _build(eos):
     def _subcritical_branch(T, P):
         """Which stable branch a (T, P) state below TC lies on, and its bracket.
 
-        Below TC the Span-Wagner isotherm is an analytic continuation through the
-        dome: it loops between the spinodals and can swing far above P_sat (at
-        294 K it reaches 12 MPa near 550 kg/m³), so P(T, ρ) = P_target has spurious
+        Below TC a multiparameter isotherm (either CO₂ backend) is an analytic
+        continuation through the dome: it loops between the spinodals and can
+        swing far above P_sat (on Span-Wagner at 294 K it reaches 12 MPa near
+        550 kg/m³), so P(T, ρ) = P_target has spurious
         roots inside the dome for any P_target below that swing. The only way to
         pick the physical root is by P against P_sat(T): P ≥ P_sat is compressed
         liquid, ρ ≥ ρ_l(T); P < P_sat is vapor, ρ ≤ ρ_v(T). Returns
@@ -89,25 +91,25 @@ def _build(eos):
         phase_hint: 0=liquid, 1=vapor, 2=supercritical/auto.
         Uses jnp.where for JIT traceability.
         """
-        subcritical_T = T < sw.TC
+        subcritical_T = T < surf.TC
         liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
 
         # Liquid: saturation liquid density at T (good for compressed liquid),
         # fall back to 2*RHOC for supercritical T
-        liquid_guess = jnp.where(subcritical_T, rho_l_T, 2.0 * sw.RHOC)
+        liquid_guess = jnp.where(subcritical_T, rho_l_T, 2.0 * surf.RHOC)
         # Vapor: saturation vapor density at T, fall back to ideal gas
-        ideal_gas_rho = P / (sw.R * T)
+        ideal_gas_rho = P / (surf.R * T)
         vapor_guess = jnp.where(subcritical_T, rho_v_T, ideal_gas_rho)
         # Auto, T >= TC: the isotherm is monotone, so any pressure-aware seed
         # converges. Near PC and TC use RHOC; liquid-like (P > 1.5*PC) 2*RHOC;
         # otherwise ideal gas.
         near_critical = jnp.logical_and(
-            jnp.abs(P - sw.PC) < 0.2 * sw.PC,
-            jnp.abs(T - sw.TC) < 15.0,
+            jnp.abs(P - surf.PC) < 0.2 * surf.PC,
+            jnp.abs(T - surf.TC) < 15.0,
         )
         sc_guess_above_TC = jnp.where(
-            near_critical, sw.RHOC,
-            jnp.where(P > 1.5 * sw.PC, 2.0 * sw.RHOC, ideal_gas_rho)
+            near_critical, surf.RHOC,
+            jnp.where(P > 1.5 * surf.PC, 2.0 * surf.RHOC, ideal_gas_rho)
         )
         # Auto, T < TC: seed on the stable branch P_sat(T) selects. A seed inside
         # the dome (RHOC, or the ideal-gas density) lands Halley on a spurious
@@ -140,7 +142,7 @@ def _build(eos):
         ρ_{n+1} = ρ_n − 2·f·f' / (2·f'² − f·f'')
         """
         rho, T, P_target, i, converged = state
-        f = sw._scalar_pressure(T, rho) - P_target
+        f = surf._scalar_pressure(T, rho) - P_target
         fp = _dP_drho(T, rho)
         fpp = _d2P_drho2(T, rho)
         # Halley denominator: 2·f'² − f·f''
@@ -182,7 +184,7 @@ def _build(eos):
         """
         lo, hi, T, P_target, i = state
         mid = 0.5 * (lo + hi)
-        f_mid = sw._scalar_pressure(T, mid) - P_target
+        f_mid = surf._scalar_pressure(T, mid) - P_target
         # P(T,ρ) is monotonically increasing in ρ for single-phase fluid,
         # so f_mid > 0 means mid is too high.
         lo_new = jnp.where(f_mid < 0.0, mid, lo)
@@ -202,7 +204,7 @@ def _build(eos):
         the liquid side, [1, ρ_v(T)] on the vapor side, the side taken from the
         explicit hint or, under auto, from P against P_sat(T).
         """
-        subcritical_T = T < sw.TC
+        subcritical_T = T < surf.TC
         liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
         liquid_side = jnp.where(
             phase_hint == LIQUID, True,
@@ -236,7 +238,7 @@ def _build(eos):
         are the caller's assertion (a metastable request is legitimate) and are
         not checked.
         """
-        subcritical_T = T < sw.TC
+        subcritical_T = T < surf.TC
         liquid_side, rho_l_T, rho_v_T = _subcritical_branch(T, P)
         on_branch = jnp.where(liquid_side, rho >= rho_l_T * (1.0 - _BRANCH_TOL),
                               rho <= rho_v_T * (1.0 + _BRANCH_TOL))
@@ -259,7 +261,7 @@ def _build(eos):
         def _bisect_branch(_):
             lo, hi = _bisection_bracket(T, P, phase_hint)
             rho_bisect = _bisection_solve(T, P, lo, hi)
-            bisect_residual = jnp.abs(sw._scalar_pressure(T, rho_bisect) - P)
+            bisect_residual = jnp.abs(surf._scalar_pressure(T, rho_bisect) - P)
             bisect_ok = bisect_residual < 1e-3 * jnp.maximum(jnp.abs(P), 1.0)
             return jnp.where(bisect_ok, rho_bisect, jnp.nan)
 
@@ -347,7 +349,7 @@ def _build(eos):
           (h ≈ cp0 * T → T ≈ h / cp0), clamped to a reasonable range.
         - Then call the 1D density solver to get ρ from (T_guess, P).
         """
-        subcritical = P < sw.PC
+        subcritical = P < surf.PC
 
         # Sub-critical path: T_sat from saturation table
         T_sat = sat.saturation_temperature(P)
@@ -358,7 +360,7 @@ def _build(eos):
         # Otherwise → near saturation, use T_sat
         T_sub = jnp.where(
             h > h_v,
-            T_sat + (h - h_v) / (sw.R * 3.5),  # rough Cp estimate
+            T_sat + (h - h_v) / (surf.R * 3.5),  # rough Cp estimate
             jnp.where(h < h_l, T_sat - 1.0, T_sat)
         )
 
@@ -367,38 +369,38 @@ def _build(eos):
         # This extrapolation gives T_pc ≈ Tc + (P - Pc) * slope, which tracks
         # the Cp peak (Widom line) much better than an ideal-gas estimate.
         dTdP_sat = 2.8e-5  # K/Pa, Clausius-Clapeyron slope near Tc
-        T_pseudo = sw.TC + (P - sw.PC) * dTdP_sat
+        T_pseudo = surf.TC + (P - surf.PC) * dTdP_sat
 
         # Ideal-gas fallback for pressures far above Pc where the pseudocritical
         # extrapolation becomes less relevant
-        T_ideal = h / (sw.R * 5.0)
+        T_ideal = h / (surf.R * 5.0)
 
         # Use pseudocritical anchor when P < 2*Pc (near-critical), else ideal-gas
-        T_super = jnp.where(P < 2.0 * sw.PC, T_pseudo, T_ideal)
+        T_super = jnp.where(P < 2.0 * surf.PC, T_pseudo, T_ideal)
 
         # Pseudocritical-aware override: when P is close to PC and h is in the
         # pseudocritical enthalpy band, start from TC.  The Widom-line Cp peak
         # causes the Newton iteration to oscillate wildly if the initial T guess
         # is on the wrong side; anchoring to TC lets the damped Newton converge.
-        h_crit = sw._scalar_enthalpy(sw.TC, sw.RHOC)  # enthalpy at critical point
-        near_pc = jnp.abs(P - sw.PC) < 0.5 * sw.PC
+        h_crit = surf._scalar_enthalpy(surf.TC, surf.RHOC)  # enthalpy at critical point
+        near_pc = jnp.abs(P - surf.PC) < 0.5 * surf.PC
         h_in_band = jnp.abs(h - h_crit) < 100.0e3  # ±100 kJ/kg
-        T_super = jnp.where(jnp.logical_and(near_pc, h_in_band), sw.TC, T_super)
+        T_super = jnp.where(jnp.logical_and(near_pc, h_in_band), surf.TC, T_super)
 
         # Compressed-liquid override: when P > PC but h is well below the
         # critical-point enthalpy, the fluid is subcooled liquid.  Estimate T
         # from a rough liquid Cp (~2500 J/kg/K) below TC rather than anchoring
         # on the pseudocritical line which overshoots into the supercritical region.
         Cp_liq = 2500.0  # J/(kg·K), rough subcooled CO₂ liquid heat capacity
-        T_liq_est = sw.TC - (h_crit - h) / Cp_liq
+        T_liq_est = surf.TC - (h_crit - h) / Cp_liq
         h_clearly_liquid = h < h_crit - 50.0e3  # h at least 50 kJ/kg below h_crit
         T_super = jnp.where(h_clearly_liquid, T_liq_est, T_super)
 
-        T_super = jnp.clip(T_super, 250.0, 800.0)
+        T_super = jnp.clip(T_super, 250.0, _T_MAX)
 
         T0 = jnp.where(subcritical, T_sub, T_super)
         # Clamp T to physical range
-        T0 = jnp.clip(T0, sw.T_TRIPLE, 800.0)
+        T0 = jnp.clip(T0, surf.T_TRIPLE, _T_MAX)
 
         rho0 = _solve_density(T0, P, phase_hint)
         return T0, rho0
@@ -411,8 +413,8 @@ def _build(eos):
         T, rho, P_target, h_target, i, converged = state
 
         # Residual
-        fP = sw._scalar_pressure(T, rho) - P_target
-        fh = sw._scalar_enthalpy(T, rho) - h_target
+        fP = surf._scalar_pressure(T, rho) - P_target
+        fh = surf._scalar_enthalpy(T, rho) - h_target
 
         # Jacobian: J = [[dP/dT, dP/drho], [dh/dT, dh/drho]]
         j00 = _dP_dT(T, rho)
@@ -434,7 +436,7 @@ def _build(eos):
         rho_new = rho - drho
 
         # Clamp to physical bounds
-        T_new = jnp.maximum(T_new, sw.T_TRIPLE)
+        T_new = jnp.maximum(T_new, surf.T_TRIPLE)
         rho_new = jnp.maximum(rho_new, 1.0)
 
         residual_small = jnp.maximum(jnp.abs(fP), jnp.abs(fh)) < TOL
@@ -486,7 +488,7 @@ def _build(eos):
         h_l, h_v = sat.saturation_enthalpies(P)
         rho_l, rho_v = sat.saturation_densities_P(P)
 
-        in_dome = jnp.logical_and(P < sw.PC, jnp.logical_and(h >= h_l, h <= h_v))
+        in_dome = jnp.logical_and(P < surf.PC, jnp.logical_and(h >= h_l, h <= h_v))
 
         # Dome-branch density: respect phase_hint
         # LIQUID → ρ_l, VAPOR → ρ_v, SUPERCRITICAL → pick by enthalpy midpoint
@@ -526,7 +528,7 @@ def _build(eos):
 
         # --- Dome detection (same logic as primal) ---
         h_l, h_v = sat.saturation_enthalpies(P)
-        in_dome = jnp.logical_and(P < sw.PC, jnp.logical_and(h >= h_l, h <= h_v))
+        in_dome = jnp.logical_and(P < surf.PC, jnp.logical_and(h >= h_l, h <= h_v))
 
         # --- Dome tangents via autodiff through saturation splines ---
         dTsat_dP = jax.grad(sat.saturation_temperature)(P)
@@ -599,8 +601,8 @@ def _build(eos):
 
         Cv_approx ~ 3.5 is a rough dimensionless heat capacity for CO₂.
         """
-        T0 = u / (3.5 * sw.R)
-        return jnp.clip(T0, sw.T_TRIPLE, 800.0)
+        T0 = u / (3.5 * surf.R)
+        return jnp.clip(T0, surf.T_TRIPLE, _T_MAX)
 
 
     # ── 1D Newton solver for T(ρ, u) ─────────────────────────────────────
@@ -608,11 +610,11 @@ def _build(eos):
     def _newton_body_Du(state):
         """One Newton step: T_{n+1} = T_n - f(T)/f'(T) where f = u(T,ρ) - u_target."""
         T, rho, u_target, i, converged = state
-        f = sw._scalar_internal_energy(T, rho) - u_target
+        f = surf._scalar_internal_energy(T, rho) - u_target
         fp = _du_dT(T, rho)  # = Cv > 0
         step = f / _safe_denom(fp)
         T_new = T - step
-        T_new = jnp.clip(T_new, sw.T_TRIPLE, 800.0)
+        T_new = jnp.clip(T_new, surf.T_TRIPLE, _T_MAX)
         converged_new = jnp.logical_or(
             jnp.abs(f) < TOL,
             jnp.abs(step) < 1e-13 * jnp.maximum(jnp.abs(T_new), 1.0)
@@ -711,8 +713,8 @@ def _build(eos):
             (T, P, h): Temperature [K], Pressure [Pa], Enthalpy [J/kg]
         """
         T = _solve_temperature_Du(rho, u, phase_hint)
-        P = sw._scalar_pressure(T, rho)
-        h = sw._scalar_enthalpy(T, rho)
+        P = surf._scalar_pressure(T, rho)
+        h = surf._scalar_enthalpy(T, rho)
         return T, P, h
 
 

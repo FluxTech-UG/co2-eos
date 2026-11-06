@@ -10,17 +10,15 @@ transport``.
   and every name that takes no ``eos`` pass through.
 * ``core``, ``inversions``, ``saturation``, ``transport``: the submodule's
   names with its ``for_eos("span_wagner")`` instance over the module-level
-  ones, which are the default backend's (nist2026).  ``transport`` also
-  carries the batched ``viscosity``, ``thermal_conductivity`` and
-  ``bulk_viscosity`` on Span-Wagner, jit(vmap(scalar)) as the module's own.
+  ones, which are the default backend's (nist2026); ``transport``'s batched
+  ``viscosity``, ``thermal_conductivity`` and ``bulk_viscosity`` with
+  ``eos="span_wagner"`` bound.
 
 Not a test module (no ``test_`` prefix).
 """
 import inspect
 from functools import partial
 from types import SimpleNamespace
-
-import jax
 
 import co2_eos as _ce
 from co2_eos import core as _core
@@ -51,7 +49,6 @@ def _instance(module, **extra):
 core = _instance(_core)
 inversions = _instance(_inversions)
 saturation = _instance(_saturation)
-_tr_sw = _transport.for_eos(SW)
 transport = _instance(_transport, **{
-    name: jax.jit(jax.vmap(getattr(_tr_sw, f"_scalar_{name}")))
+    name: partial(getattr(_transport, name), eos=SW)
     for name in ("viscosity", "thermal_conductivity", "bulk_viscosity")})

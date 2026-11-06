@@ -25,7 +25,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 from co2_eos import span_wagner as sw
-from co2_eos import helmholtz as hz
+from co2_eos import span_wagner_kernel as hz
 from co2_eos import saturation as _sat_mod
 from co2_eos import core as _core_mod
 

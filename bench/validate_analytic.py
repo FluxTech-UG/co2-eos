@@ -12,7 +12,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 from co2_eos import span_wagner as sw
-from co2_eos import helmholtz as hz
+from co2_eos import span_wagner_kernel as hz
 
 # Autodiff references (same definitions inversions.py / span_wagner.py use)
 ar = sw.alphar

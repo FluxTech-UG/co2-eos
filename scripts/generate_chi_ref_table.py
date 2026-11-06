@@ -25,8 +25,8 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 from co2_eos import backends
+from co2_eos.transport import _T_REF as T_REF  # K, Huber et al. (2016)
 
-T_REF = 456.19            # K, Huber et al. (2016); must match transport._T_REF
 DELTA_LO, DELTA_HI = 0.0, 2.75
 DEGREE = 100
 

@@ -19,16 +19,20 @@ from types import SimpleNamespace
 
 jax.config.update("jax_enable_x64", True)
 
-# ── Shared constants ──────────────────────────────────────────────────────
-# The correlations' reducing and molecular constants (Span-Wagner's values,
-# which Huber 2016 and Laesecke-Muzny 2017 were fitted with); the EOS-coupled
-# half below reads the selected backend's own.
-TC = 304.1282            # K
-RHOC_MOLAR = 10624.9063  # mol/m³
-M = 0.0440098            # kg/mol
-R_MOLAR = 8.31451        # J/(mol·K)
-PC = 7377300.0            # Pa
-RHOC_MASS = RHOC_MOLAR * M  # kg/m³ ≈ 467.60
+# ── The correlations' reducing parameters ────────────────────────────────
+# Huber 2016 and Laesecke-Muzny 2017 were fitted with Span-Wagner's critical
+# point, molar mass and gas constant, and keep them on every backend (NIST IR
+# 8608, Sec. 11): they are parameters of the correlations, read from
+# ``span_wagner``, their one home.  Private, so no generic name of this module
+# carries a Span-Wagner value; the EOS-coupled half below reads the selected
+# backend's own constants.
+from co2_eos import span_wagner as _sw
+
+_CORR_TC = _sw.TC                  # K
+_CORR_RHOC_MOLAR = _sw.RHOC_MOLAR  # mol/m³
+_CORR_M = _sw.M                    # kg/mol
+_CORR_R_MOLAR = _sw.R_MOLAR        # J/(mol·K)
+_CORR_PC = _sw.PC                  # Pa
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Residual Helmholtz derivatives (analytic, shared with the thermo core)
@@ -116,8 +120,8 @@ _GAMMA_VISC = 8.06282737481277
 
 # Reference viscosity scale η_tL: Eq. (9)
 _ETA_TL = (_RHO_TL ** (2.0 / 3.0)
-           * (R_MOLAR * _TT) ** 0.5
-           / (M ** (1.0 / 6.0) * 84446887.43579945))
+           * (_CORR_R_MOLAR * _TT) ** 0.5
+           / (_CORR_M ** (1.0 / 6.0) * 84446887.43579945))
 
 
 def _eta_residual(T, rho_mass):
@@ -133,7 +137,7 @@ def _eta_residual(T, rho_mass):
 
 def _scalar_viscosity(T, rho):
     """Dynamic viscosity μ [Pa·s] at scalar (T, ρ [kg/m³])."""
-    rho_molar = rho / M
+    rho_molar = rho / _CORR_M
     eta0 = _eta_dilute(T)
     eta_init = _eta_initial(T, rho_molar, eta0)
     eta_res = _eta_residual(T, rho)
@@ -150,7 +154,7 @@ _LAM0_L = jnp.array([0.0151874307, 0.0280674040, 0.0228564190, -0.00741624210])
 
 def _lambda_dilute(T):
     """Dilute-gas thermal conductivity λ₀(T) [W/(m·K)]."""
-    tau = TC / T
+    tau = _CORR_TC / T
     tau2 = tau * tau
     poly = (_LAM0_L[0] + _LAM0_L[1] * tau
             + _LAM0_L[2] * tau2 + _LAM0_L[3] * tau2 * tau)
@@ -165,7 +169,7 @@ _LAM_RES_B = jnp.array([
 _LAM_RES_D = jnp.array([1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6], dtype=jnp.float64)
 _LAM_RES_T = jnp.array([0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1], dtype=jnp.float64)
 
-_RHOMASS_REDUCING = 467.6  # kg/m³ (same as RHOC_MASS)
+_RHOMASS_REDUCING = 467.6  # kg/m³, Huber 2016's rounded reducing density
 
 
 def _lambda_residual(T, rho):
@@ -173,7 +177,7 @@ def _lambda_residual(T, rho):
 
     Σ b_k · δ^{1..6} · (1 or 1/τ): a δ multiply ladder, no pow calls.
     """
-    inv_tau = T / TC
+    inv_tau = T / _CORR_TC
     delta = rho / _RHOMASS_REDUCING
     b = _LAM_RES_B
     out = 0.0
@@ -252,8 +256,8 @@ def _vibrational_relaxation_time(T, rho):
     Note the two paths also cross near 200 kg/m³, so the switch is not
     max(λ_dil, λ_dense): between the crossings the dense path is the larger.
     """
-    n = rho / M * _NA
-    v_mean = jnp.sqrt(8.0 * R_MOLAR * T / (jnp.pi * M))
+    n = rho / _CORR_M * _NA
+    v_mean = jnp.sqrt(8.0 * _CORR_R_MOLAR * T / (jnp.pi * _CORR_M))
     lam_dilute = 1.0 / (jnp.sqrt(2.0) * jnp.pi * _SIGMA_HS ** 2 * n)
     lam_dense = _A_MFP * (n ** (-1.0 / 3.0) - _SIGMA_HS)
     w = jax.nn.sigmoid((rho - _RHO_MFP_SWITCH) / _RHO_MFP_WIDTH)
@@ -273,9 +277,9 @@ def _vibrational_relaxation_time(T, rho):
 # their parameters on the new equation): the scaling p_c/ρ_c² of χ̃, ξ₀, Γ,
 # R₀, q_D, T_ref, the λ₀ and λ_res reducing values and τ₁₁'s kinetic
 # constants.  Molar quantities are expressed in the correlation's molar units
-# (``M`` above): the backend's molar R and ρ_c are carried as
+# (M = ``_CORR_M`` above): the backend's molar R and ρ_c are carried as
 # R_MOL_X = R_b·M/M_b and RHOC_MOL_X = ρ_c,b·M_b/M, both exactly the
-# module's own values for Span-Wagner, so its operations are those of 0.5.0.
+# correlation's own values on Span-Wagner, so its operations are those of 0.5.0.
 
 
 def _build(eos):
@@ -288,15 +292,15 @@ def _build(eos):
     R_MOLAR_B = _b.surface.R_MOLAR
     M_B = _b.surface.M
     RHOC_B = _b.surface.RHOC
-    R_MOL_X = R_MOLAR_B * (M / M_B)
-    RHOC_MOL_X = _b.surface.RHOC_MOLAR * (M_B / M)
+    R_MOL_X = R_MOLAR_B * (_CORR_M / M_B)
+    RHOC_MOL_X = _b.surface.RHOC_MOLAR * (M_B / _CORR_M)
 
     # The enhancement needs dp/dρ at the fixed reference temperature, a smooth
     # function of δ alone.  A precomputed degree-100 Chebyshev fit (3e-13 max rel
     # error over δ ∈ [0, 2.75]; scripts/generate_chi_ref_table.py) replaces the
-    # full residual bundle at τ_ref.  Tolerant of a missing file so the generator
-    # script can import this package to BUILD the table; the exact bundle is the
-    # fallback, so the fallback changes speed only, never values.
+    # full residual bundle at τ_ref.  A missing file is tolerated at build time
+    # (the generator script imports this package to build the table); the first
+    # call that needs the fit raises.
     _CHI_PATH = _backends.table_path(eos, "chi_ref_cheb")
     _HAVE_CHI_CHEB = False
     try:
@@ -314,15 +318,15 @@ def _build(eos):
 
 
     def _dpdrho_ref_reduced(delta):
-        """1 + 2δ·αʳ_δ + δ²·αʳ_δδ at T_ref: Chebyshev-Clenshaw (or exact fallback).
+        """1 + 2δ·αʳ_δ + δ²·αʳ_δδ at T_ref by Chebyshev-Clenshaw on the stored fit.
 
         Queries are clamped to the fit box; beyond δ = 2.75 the enhancement is
         zero anyway (χ − χ_ref < 0 there).
         """
         if not _HAVE_CHI_CHEB:
-            tau_ref = TC_B / _T_REF
-            _, ar_d, _, ar_dd, _, _ = hz.residual_derivs(tau_ref, delta)
-            return 1.0 + 2.0 * delta * ar_d + delta * delta * ar_dd
+            raise FileNotFoundError(
+                f"{_CHI_PATH} is missing: build it with "
+                f"python scripts/generate_chi_ref_table.py --eos {eos}")
         x = jnp.clip((2.0 * delta - (_CHI_LO + _CHI_HI)) / (_CHI_HI - _CHI_LO),
                      -1.0, 1.0)
         b1 = jnp.zeros_like(delta)
@@ -343,17 +347,17 @@ def _build(eos):
 
         Returns (ξ, Δχ̃).
         """
-        rho_molar = rho / M
+        rho_molar = rho / _CORR_M
         delta = rho_molar / RHOC_MOL_X        # == rho / RHOC_B
 
         # ── dp/dρ at (T, ρ) ──
         dp_drho_mol = R_MOL_X * T * (1.0 + 2.0 * delta * alr_d
                                       + delta ** 2 * alr_dd)
-        chi = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_mol
+        chi = _CORR_PC / _CORR_RHOC_MOLAR ** 2 * rho_molar / dp_drho_mol
 
         # ── dp/dρ at reference temperature T_ref (same δ; precomputed fit) ──
         dp_drho_ref = R_MOL_X * _T_REF * _dpdrho_ref_reduced(delta)
-        chi_ref = PC / RHOC_MOLAR ** 2 * rho_molar / dp_drho_ref * _T_REF / T
+        chi_ref = _CORR_PC / _CORR_RHOC_MOLAR ** 2 * rho_molar / dp_drho_ref * _T_REF / T
 
         diff = chi - chi_ref
         return _xi_of_excess(diff), diff
@@ -368,7 +372,7 @@ def _build(eos):
         there is finite and the final ``where`` passes a zero tangent rather than
         0·∞ = NaN; where ξ > 0 the two agree.
         """
-        rho_molar = rho / M
+        rho_molar = rho / _CORR_M
         tau = TC_B / T
         delta = rho_molar / RHOC_MOL_X        # == rho / RHOC_B
 
@@ -551,46 +555,55 @@ _scalar_bulk_viscosity = _DEFAULT._scalar_bulk_viscosity
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Public API: batched, JIT-compiled
+# Public API: batched, JIT-compiled, the backend static
 # ═══════════════════════════════════════════════════════════════════════════
 
-@jax.jit
-def viscosity(T, rho):
+_jit = partial(jax.jit, static_argnames=("eos",))
+
+
+@_jit
+def viscosity(T, rho, eos=_backends.DEFAULT_EOS):
     """Dynamic viscosity μ [Pa·s]. Batched over leading axis.
+
+    Laesecke-Muzny reads no EOS property; ``eos`` is accepted (and checked)
+    so every property function takes the same keyword.
 
     Args:
         T: temperature [K], 1-D array
         rho: mass density [kg/m³], 1-D array
+        eos: backend name, static (default ``DEFAULT_EOS``)
 
     Returns:
         μ [Pa·s], same shape as inputs
     """
-    return jax.vmap(_scalar_viscosity)(T, rho)
+    return jax.vmap(for_eos(eos)._scalar_viscosity)(T, rho)
 
 
-@jax.jit
-def thermal_conductivity(T, rho):
+@_jit
+def thermal_conductivity(T, rho, eos=_backends.DEFAULT_EOS):
     """Thermal conductivity λ [W/(m·K)]. Batched over leading axis.
 
     Args:
         T: temperature [K], 1-D array
         rho: mass density [kg/m³], 1-D array
+        eos: backend name, static (default ``DEFAULT_EOS``)
 
     Returns:
         λ [W/(m·K)], same shape as inputs
     """
-    return jax.vmap(_scalar_thermal_conductivity)(T, rho)
+    return jax.vmap(for_eos(eos)._scalar_thermal_conductivity)(T, rho)
 
 
-@jax.jit
-def bulk_viscosity(T, rho):
+@_jit
+def bulk_viscosity(T, rho, eos=_backends.DEFAULT_EOS):
     """Bulk viscosity ζ [Pa·s]. Batched over leading axis.
 
     Args:
         T: temperature [K], 1-D array
         rho: mass density [kg/m³], 1-D array
+        eos: backend name, static (default ``DEFAULT_EOS``)
 
     Returns:
         ζ [Pa·s], same shape as inputs
     """
-    return jax.vmap(_scalar_bulk_viscosity)(T, rho)
+    return jax.vmap(for_eos(eos)._scalar_bulk_viscosity)(T, rho)

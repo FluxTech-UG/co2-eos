@@ -23,7 +23,7 @@ The hot path solves `T(ρ, u)` by a table-seeded, fixed-count, unrolled
 analytic-Cv Newton, then derives every thermodynamic and transport property
 from one shared α-derivative bundle. Three structural facts keep the
 arithmetic cheap: all asserted at import against the Span-Wagner coefficient
-tables (`helmholtz.py`):
+tables (`span_wagner_kernel.py`):
 
 1. **Transcendental economization.** Every Span-Wagner τ-exponent is a
    multiple of ¼ (→ two sqrts + a multiply ladder, zero `pow`), every

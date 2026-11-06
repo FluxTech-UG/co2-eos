@@ -11,12 +11,31 @@ without `eos=` and the submodules' module-level names (`core`, `inversions`,
 its own name only, and `eos="span_wagner"` returns the 0.5.0 results bit for
 bit.
 
+### Added
+
+- `critical_point(eos=...)`, the backend's (T_c, p_c, ρ_c), and
+  `triple_point(eos=...)`, its triple-point temperature (a reference gas
+  raises): the backend-neutral constants a consumer compares against.
+
 ### Changed
 
 - `DEFAULT_EOS = NIST2026`.  A caller that needs Span-Wagner names it:
   `eos="span_wagner"` on a public function, `<submodule>.for_eos("span_wagner")`
-  for a submodule's kernels, or the `span_wagner` module (and `helmholtz`, its
-  analytic kernel).
+  for a submodule's kernels, or the `span_wagner` module (and
+  `span_wagner_kernel`, its analytic kernel).
+- `co2_eos.helmholtz` is `co2_eos.span_wagner_kernel`: a module holding
+  Span-Wagner content carries the name.
+- `transport`'s batched `viscosity`, `thermal_conductivity` and `bulk_viscosity`
+  take the static `eos=` (default nist2026).  The correlations' Span-Wagner
+  reducing parameters are private, `transport._CORR_TC`, `_CORR_PC`, `_CORR_M`,
+  `_CORR_R_MOLAR`, `_CORR_RHOC_MOLAR`, read from `span_wagner`; the public
+  `transport.TC`, `PC`, `M`, `R_MOLAR`, `RHOC_MOLAR`, `RHOC_MASS` are gone (a
+  caller reads `critical_point(eos=...)` or the backend's surface).
+- A missing seed table or chi table raises `FileNotFoundError` at the first call
+  that needs it, naming the generator; the affine seed and the exact-bundle chi
+  fallback are gone.
+- The inversions' temperature ceiling has one home, `backends.INVERSION_T_MAX`
+  (800 K), and the README states it.
 - The submodules' module-level names are the nist2026 instance:
   `core._thermo`, `core._state_from_rho_u`, `inversions.density_from_PT`,
   `inversions.state_from_Ph`, `inversions.temperature_from_Du`,

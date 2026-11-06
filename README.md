@@ -50,7 +50,15 @@ s_sw = co2_eos.properties(314.0, 472.0, eos="span_wagner")  # the same state on 
 ```
 
 The transport correlations keep their parameters on either backend; their critical parts
-read the selected backend's thermodynamics.
+read the selected backend's thermodynamics. `co2_eos.critical_point(eos=...)` returns the
+backend's (T_c, p_c, ρ_c) and `co2_eos.triple_point(eos=...)` its triple-point temperature,
+so a comparison against the critical point follows the backend the properties come from.
+
+The submodules follow the same default: the generic names of `co2_eos.core`,
+`inversions`, `saturation` and `transport` are the nist2026 instance, like the public API,
+and each submodule's Span-Wagner instance is `<submodule>.for_eos("span_wagner")`.
+`co2_eos.span_wagner` is the Span-Wagner surface (the validation ground truth and the
+benchmark baseline) and `co2_eos.span_wagner_kernel` its analytic kernel.
 
 ## Reference gases
 
@@ -83,7 +91,7 @@ is exact for a dilute monatomic gas.
 
 ## Try it without cloning
 
-[`examples/launch_demo.ipynb`](examples/launch_demo.ipynb) is the launch demo: validation against CoolProp, the `state_from_PT` CPU/GPU benchmarks, and a worked example of gradient-based optimisation through `state_from_PT`. (The v0.2 hot-path `(ρ, u)` benchmarks are in [`bench/PROFILING.md`](bench/PROFILING.md).) [Read it on GitHub](https://github.com/FluxTech-UG/co2-eos/blob/main/examples/launch_demo.ipynb) for a static render, or [open it on Colab](https://colab.research.google.com/github/FluxTech-UG/co2-eos/blob/main/examples/launch_demo.ipynb) and switch the runtime to T4 GPU to reproduce the comparison in about 15 minutes, most of that being the CPU baseline.
+[`examples/launch_demo.ipynb`](examples/launch_demo.ipynb) is the launch demo, run on `eos="span_wagner"` (the equation CoolProp implements, so the comparison is like for like): validation against CoolProp, the `state_from_PT` CPU/GPU benchmarks, and a worked example of gradient-based optimisation through `state_from_PT`. (The v0.2 hot-path `(ρ, u)` benchmarks are in [`bench/PROFILING.md`](bench/PROFILING.md).) [Read it on GitHub](https://github.com/FluxTech-UG/co2-eos/blob/main/examples/launch_demo.ipynb) for a static render, or [open it on Colab](https://colab.research.google.com/github/FluxTech-UG/co2-eos/blob/main/examples/launch_demo.ipynb) and switch the runtime to T4 GPU to reproduce the comparison in about 15 minutes, most of that being the CPU baseline.
 
 ## Why this exists
 
@@ -121,59 +129,21 @@ CO2-EOS solves this for CO₂ by implementing the reference equations of state d
 
 **State inversions:**
 
-- `properties_from_rho_u(rho, u)` / `temperature_from_rho_u(rho, u)`: the batched simulation hot path. Carries (ρ, u) as conserved variables; solves `T(ρ, u)` once with a table-seeded fixed-iteration analytic-Cv Newton, then derives every property (and viscosity / thermal conductivity) in one fused pass. `custom_jvp` (implicit function theorem) for exact forward- and reverse-mode gradients.
+- `properties_from_rho_u(rho, u)` / `temperature_from_rho_u(rho, u)`: the batched simulation hot path (pass 1-D arrays). Carries (ρ, u) as conserved variables; solves `T(ρ, u)` once with a table-seeded fixed-iteration analytic-Cv Newton, then derives every property (and viscosity / thermal conductivity) in one fused pass. `custom_jvp` (implicit function theorem) for exact forward- and reverse-mode gradients. `phase_hint` is accepted for API symmetry and unused: `u` is monotone in `T` at fixed `ρ`, so the inversion needs no phase branch.
 - `state_from_Du(rho, u)`: scalar form of the above (vmap for batches).
 - `properties_from_rho_T(rho, T)`: batched full state from (ρ, T), no inversion; the array-native counterpart of the scalar `properties(T, rho)` (ρ first, like `properties_from_rho_u`). One analytic α-derivative pass per point feeds every property.
 - `state_from_PT(P, T)`: Halley's method with pressure-aware critical-region initial guess, step damping, and bisection safety net
 - `state_from_Ph(P, h, phase_hint=)` (phase-aware): detects the two-phase dome at subcritical pressures and returns saturation properties directly, bypassing single-phase Newton iteration inside the dome
 
-## Migrating to v0.2
-
-v0.2 is a performance redesign. **Accuracy and gradients are unchanged** and the
-scalar state functions keep their signatures, so most code needs no changes. The
-one thing worth adopting is the fused hot path.
-
-If your simulation carried `(ρ, u)` and recovered primitives with separate calls:
-
-```python
-# v0.1: separate calls, each re-evaluating α-derivatives
-from co2_eos.inversions import temperature_from_Du, SUPERCRITICAL
-from co2_eos import span_wagner as sw, transport
-T  = temperature_from_Du(rho, u, phase)     # nested-autodiff Cv, while_loop
-P  = sw.pressure(T, rho)
-mu = transport.viscosity(T, rho)
-k  = transport.thermal_conductivity(T, rho)
-```
-
-replace it with the single fused call:
-
-```python
-# v0.2: one fused pass that solves T once and reuses the α-derivatives
-import co2_eos as co2
-s = co2.properties_from_rho_u(rho, u)       # phase_hint defaults to SUPERCRITICAL
-T, P, mu, k = s["temperature"], s["pressure"], s["viscosity"], s["thermal_conductivity"]
-# also: s["cp"], s["speed_of_sound"], s["enthalpy"], s["entropy"], s["gibbs_energy"], …
-```
-
-Notes:
-
-- `properties_from_rho_u` / `temperature_from_rho_u` are **batched** (pass 1-D
-  arrays). The scalar `state_from_Du(rho, u)` returns the same dict for a single
-  point.
-- `phase_hint` is accepted for API symmetry but unused by the `(ρ, u)` inversion
-  (`u` is monotone in `T` at fixed `ρ`, so no phase branch is needed).
-- `co2_eos.span_wagner` is the Span-Wagner surface, the validation ground truth and
-  the benchmark baseline. The submodules' generic names (`co2_eos.inversions`,
-  `transport`, `saturation`, `core`) are the default backend, nist2026, like the
-  public API; their Span-Wagner instance is `<submodule>.for_eos("span_wagner")`.
-
 ## Valid range
 
-On `eos="span_wagner"`, CO2-EOS covers the full fluid region of the Span-Wagner EOS:
+The inversions (`properties_from_rho_u`, `state_from_PT`, `state_from_Ph`, `state_from_Du`) bound their temperature iterates by the backend's triple point and 800 K (`co2_eos.backends.INVERSION_T_MAX`), on either CO₂ backend: a state above 800 K is outside the package's range. The direct evaluations from (T, ρ) (`properties`, `properties_from_rho_T`) take any temperature the equation holds.
 
-- **Temperature:** 216.6 K (triple point) to 1100 K
+On `eos="span_wagner"`, the equation holds over the full fluid region of the Span-Wagner EOS:
+
+- **Temperature:** 216.6 K (triple point) to 1100 K for the (T, ρ) evaluations; to 800 K for the inversions
 - **Pressure:** up to 800 MPa
-- **Saturation curve:** triple point to within 1 mK of the critical point (304.1282 K, 7.3773 MPa)
+- **Saturation curve:** triple point to within 1 mK of the critical point (`co2_eos.critical_point(eos="span_wagner")`)
 
 On `eos="nist2026"` (the default), the equation is checked against the values NIST IR 8608 prints (`tests/test_nist2026_verification.py`) and against Span-Wagner over 230 to 800 K and 0.05 to 100 MPa away from the critical point (`tests/test_nist2026_vs_span_wagner.py`), with its own saturation table and triple point (216.5909 K).
 
@@ -244,7 +214,8 @@ Contributions that extend CO₂ capability are welcome:
 
 The implementations follow these published formulations:
 
-- **EOS:** Span, R. and Wagner, W. (1996). "A New Equation of State for Carbon Dioxide." *J. Phys. Chem. Ref. Data*, 25(6), 1509–1596.
+- **EOS (the default):** Lemmon, E. W., Harvey, A. H. and Hellmann, R. (2026). "Alternative Fundamental Equation of State for Fluid Carbon Dioxide." NIST IR 8608, doi:10.6028/NIST.IR.8608.
+- **EOS (`eos="span_wagner"`):** Span, R. and Wagner, W. (1996). "A New Equation of State for Carbon Dioxide." *J. Phys. Chem. Ref. Data*, 25(6), 1509–1596.
 - **Viscosity:** Laesecke, A. and Muzny, C. D. (2017). "Reference Correlation for the Viscosity of Carbon Dioxide." *J. Phys. Chem. Ref. Data*, 46, 013107.
 - **Thermal conductivity:** Huber, M. L., Sykioti, E. A., Assael, M. J., and Perkins, R. A. (2016). "Reference Correlation of the Thermal Conductivity of Carbon Dioxide from the Triple Point to 1100 K and up to 200 MPa." *J. Phys. Chem. Ref. Data*, 45, 013102.
 

@@ -9,7 +9,7 @@ branching), with the default ``DEFAULT_EOS``:
     ``nist2026``; its tables carry the suffix ``_nist2026``.
   * ``"span_wagner"``: Span & Wagner (1996), bit for bit 0.5.0.  Its surface
     is ``span_wagner`` (constants, α, the autodiff property functions) and its
-    analytic kernel ``helmholtz``; its tables carry no suffix.
+    analytic kernel ``span_wagner_kernel``; its tables carry no suffix.
 
 A backend's surface module provides ``TC, RHOC, RHOC_MOLAR, R, R_MOLAR, M,
 PC, T_TRIPLE`` and ``_scalar_pressure``, ``_scalar_enthalpy``,
@@ -31,10 +31,10 @@ for the CO₂ backends alone.
 from pathlib import Path
 from types import SimpleNamespace
 
-from co2_eos import helmholtz as _helmholtz
 from co2_eos import nist2026 as _nist2026
 from co2_eos import reference_gases as _reference_gases
 from co2_eos import span_wagner as _span_wagner
+from co2_eos import span_wagner_kernel as _span_wagner_kernel
 
 SPAN_WAGNER = "span_wagner"
 NIST2026 = "nist2026"
@@ -46,11 +46,17 @@ REFERENCE_GAS_NAMES = (AIR, HELIUM, ARGON)
 EOS_NAMES = CO2_EOS_NAMES + REFERENCE_GAS_NAMES
 DEFAULT_EOS = NIST2026
 
+# The upper temperature bound [K] of the CO₂ inversions' iterates (the fused
+# (ρ, u) Newton in ``core``, the guesses and the (ρ, u) Newton in
+# ``inversions``), on every CO₂ backend.  A state above it is outside the
+# package's range; the reference gases bound their own (``T_CLIP``).
+INVERSION_T_MAX = 800.0
+
 DATA_DIR = Path(__file__).parent / "data"
 
 _BACKENDS = {
     SPAN_WAGNER: SimpleNamespace(name=SPAN_WAGNER, surface=_span_wagner,
-                                 kernel=_helmholtz, suffix="", has_dome=True),
+                                 kernel=_span_wagner_kernel, suffix="", has_dome=True),
     NIST2026: SimpleNamespace(name=NIST2026, surface=_nist2026,
                               kernel=_nist2026, suffix="_nist2026", has_dome=True),
     **{name: SimpleNamespace(name=name, surface=_reference_gases.GASES[name],

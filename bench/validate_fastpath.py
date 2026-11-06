@@ -3,7 +3,7 @@
 Fast path = the public API with ``eos="span_wagner"``.
 Reference = the Span-Wagner oracle (``span_wagner``'s autodiff derivatives of
 α) plus the transport correlations written straight from the papers with
-plain ``pow`` calls, sharing NO code with the economized ``helmholtz`` /
+plain ``pow`` calls, sharing NO code with the economized ``span_wagner_kernel`` /
 ``core`` / ``transport`` kernels under test.  Temperature is recovered by a
 to-convergence while-loop Newton (tol 1e-13 K, 60 iteration cap) seeded
 crudely, independent of the seed table.

@@ -4,7 +4,8 @@ Components timed separately on the Span-Wagner backend (all jitted, vmapped
 over the batch, float64):
 
   full        properties_from_rho_u(rho, u)            the consumer hot path
-  newton      temperature_from_rho_u(rho, u)           seed + 5 fixed Newton steps
+  newton      temperature_from_rho_u(rho, u)           seed + the backend's fixed
+                                                       Newton steps
   seed        the bilinear (rho, u) -> T0 table seed alone
   state_Trho  _state_from_T_rho(T, rho)                thermo + transport at known T
   thermo      _thermo(T, rho)                          one full analytic bundle + ideal
@@ -17,7 +18,8 @@ Plus:
   * an HLO op census of the compiled hot path (pow / exp / log / sqrt / atan
     counts per batch, i.e. the transcendental budget per point),
   * Newton convergence from the shipped seed table: max/p99 |T_k - T*| after
-    k = 0..5 fixed iterations over the operating envelope.
+    k = 0..5 fixed iterations over the operating envelope (the hot path runs
+    the backend's count, ``core._NEWTON_ITERS_TABLE``).
 
 Envelope sampled: T in [290, 350] K, rho in [60, 700] kg/m3 (the consumers'
 declared operating box), u derived from Span-Wagner so (rho, u) is consistent.
@@ -40,14 +42,16 @@ jax.config.update("jax_enable_x64", True)
 import co2_eos
 from co2_eos import span_wagner as sw
 from co2_eos import transport as tr
-from co2_eos import helmholtz as hz
+from co2_eos import span_wagner_kernel as hz
 from co2_eos import core as _core_mod
 
 # Every call is on the Span-Wagner backend: the public calls name it, and the
-# component kernels are its instance (``helmholtz`` is its analytic kernel).
+# component kernels are its instance (``span_wagner_kernel`` is its analytic
+# kernel).
 _EOS = co2_eos.SPAN_WAGNER
 core = _core_mod.for_eos(_EOS)
 _tr_sw = tr.for_eos(_EOS)
+_ITERS = _core_mod._NEWTON_ITERS_TABLE[_EOS]
 
 NS = [64, 128, 256, 1024]
 REPEAT = 200
@@ -188,7 +192,7 @@ def main():
     transport = r["state_Trho"] - r["thermo"]
     print(f"\nSplit at N=64 (of {full*1e6:.1f} us total):")
     for name, val in [
-        ("newton (seed + 5 fixed iters)", r["newton"]),
+        (f"newton (seed + {_ITERS} fixed iters)", r["newton"]),
         ("  of which seed table", r["seed"]),
         ("thermo bundle (residual+ideal+props)", r["thermo"]),
         ("transport (visc + conductivity)", transport),

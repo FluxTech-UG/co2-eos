@@ -21,7 +21,7 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 from co2_eos import span_wagner as sw
-from co2_eos import helmholtz as hz
+from co2_eos import span_wagner_kernel as hz
 
 TAU_LO, TAU_HI = sw.TC / 350.0, sw.TC / 290.0
 D_LO, D_HI = 60.0 / sw.RHOC, 700.0 / sw.RHOC

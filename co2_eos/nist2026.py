@@ -8,7 +8,7 @@ near-critical oscillations in c_p, κ_T and (∂c_v/∂T)_ρ (report Sec. 5).
 
 This module is the second backend of co2-eos, selected by ``eos="nist2026"``
 on every public function.  It provides, under the same names and with the
-same return shapes, what ``span_wagner`` and ``helmholtz`` provide for the
+same return shapes, what ``span_wagner`` and ``span_wagner_kernel`` provide for the
 first backend:
 
   * the constants ``TC, RHOC, RHOC_MOLAR, R, R_MOLAR, M, PC, T_TRIPLE``;
@@ -23,7 +23,7 @@ first backend:
     ``_scalar_cp``, ``_scalar_speed_of_sound``, ``_scalar_gibbs_energy``.
 
 The coefficients live in ``nist2026_data`` (the single source).  None of the
-Span-Wagner economizations in ``helmholtz`` hold here (τ-exponents are not
+Span-Wagner economizations in ``span_wagner_kernel`` hold here (τ-exponents are not
 multiples of ¼, the exponential envelope carries a factor r, the Gaussian ε
 differ per term), so the kernel is the generic form vectorized over the 24
 terms: one ln τ, one ln δ, and per term one exp for τ^t δ^d and one for the
@@ -116,7 +116,7 @@ def alpha(tau, delta):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Analytic kernels (the names and return shapes of ``helmholtz``)
+# Analytic kernels (the names and return shapes of ``span_wagner_kernel``)
 # ═══════════════════════════════════════════════════════════════════════════
 
 def ideal_derivs(tau, delta):

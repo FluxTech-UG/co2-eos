@@ -48,7 +48,8 @@ def properties():
     print(f"  worst {worst:.2e}  -> {'PASS' if worst < 1e-10 else 'CHECK'}")
 
 def main():
-    print(f"N_NEWTON = {core._NEWTON_ITERS}, have_seed={core._HAVE_SEED}\n")
+    print(f"N_NEWTON = {_core_mod._NEWTON_ITERS_TABLE[core.eos]}, "
+          f"have_seed={core._HAVE_SEED}\n")
     print("Seed quality (regime):")
     seed_quality(300, 333, 170, 470)
     print("\nRound-trip T->u->T:")
