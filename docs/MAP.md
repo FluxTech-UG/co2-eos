@@ -636,9 +636,9 @@ _The hand-coded analytic Helmholtz derivatives must match jax.grad._
 - _grid()  ·L29
 - const PTS  ·L40
 - _rel(a, b)  ·L43
-- test_residual_derivs_match_autodiff()  ·L47
-- test_ideal_derivs_match_autodiff()  ·L64
-- test_fast_tau_path_matches_full()  ·L78: The δ-precomputed Newton inner-loop path equals the full bundle.
+- @pytest.mark.slow test_residual_derivs_match_autodiff()  ·L48
+- test_ideal_derivs_match_autodiff()  ·L65
+- test_fast_tau_path_matches_full()  ·L79: The δ-precomputed Newton inner-loop path equals the full bundle.
 
 ### tests/test_bulk_viscosity.py
 _Bulk viscosity ζ = ζ_vib + ζ_crit (0.5.0)._
@@ -708,9 +708,9 @@ _The economized (ρ, u) fast path must match the independent oracle chain._
 - const _REPO  ·L24
 - @pytest.fixture envelope()  ·L32
 - test_properties_vs_oracle(envelope)  ·L37: Every property ≤ 5e-10 rel vs the independent chain (measured ~1e-10).
-- test_derivatives_vs_ift_oracle(envelope)  ·L47: d(q)/d(ρ,u), forward and reverse, ≤ 1e-9 vs IFT-oracle references.
-- test_chi_ref_cheb_matches_exact_bundle()  ·L72: The precomputed Chebyshev equals the exact bundle at τ_ref ≤ 5e-12.
-- test_inversion_roundoff_at_three_iterations(envelope)  ·L87: 3 fixed Newton steps from the v2 seed reach ≤ 1e-11 K single-phase.
+- @pytest.mark.slow test_derivatives_vs_ift_oracle(envelope)  ·L48: d(q)/d(ρ,u), forward and reverse, ≤ 1e-9 vs IFT-oracle references.
+- test_chi_ref_cheb_matches_exact_bundle()  ·L73: The precomputed Chebyshev equals the exact bundle at τ_ref ≤ 5e-12.
+- test_inversion_roundoff_at_three_iterations(envelope)  ·L88: 3 fixed Newton steps from the v2 seed reach ≤ 1e-11 K single-phase.
 
 ### tests/test_generic_names.py
 _Generic names hold no Span-Wagner content, and the docs state the current state._
@@ -931,7 +931,7 @@ _The Span-Wagner backend, named with ``eos="span_wagner"``, is bit for bit 0.5.0
 - const PROBE  ·L24
 - const REF_COMMIT  ·L25
 - _run_probe(root, out, *eos)  ·L28
-- test_span_wagner_bit_for_bit(tmp_path)  ·L44
+- @pytest.mark.slow test_span_wagner_bit_for_bit(tmp_path)  ·L45
 
 ## Other source files
 

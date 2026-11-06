@@ -41,6 +41,7 @@ def _run_probe(root, out, *eos):
     return dict(np.load(out))
 
 
+@pytest.mark.slow
 def test_span_wagner_bit_for_bit(tmp_path):
     if shutil.which("git") is None:
         pytest.skip("git not on PATH")

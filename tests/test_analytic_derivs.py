@@ -44,6 +44,7 @@ def _rel(a, b):
     return abs(float(a) - float(b)) / max(abs(float(b)), 1e-10)
 
 
+@pytest.mark.slow
 def test_residual_derivs_match_autodiff():
     worst = 0.0
     for tau, delta in PTS:

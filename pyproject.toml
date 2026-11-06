@@ -36,6 +36,7 @@ dependencies = [
 test = [
     "CoolProp>=6.6",
     "pytest>=7.0",
+    "pytest-xdist>=3.0",
 ]
 # `dev` adds anything needed to regenerate the saturation table from scratch
 # (scipy for the Maxwell-construction solver, CoolProp for initial guesses).
@@ -59,3 +60,6 @@ co2_eos = ["data/*.npz"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: a test that runs over a minute on a laptop; `make slow` runs them, `make test` leaves them out, CI runs every test",
+]

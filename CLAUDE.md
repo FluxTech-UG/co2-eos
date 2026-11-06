@@ -48,6 +48,25 @@ current symbol-level inventory. The shape:
 - `bench/`: profiling and validation studies; `scripts/`: table generation;
   `examples/`: the launch demo.
 
+## Tests
+
+Two tiers, split by the `slow` marker (registered in `pyproject.toml`):
+
+- **`make test`**: every test not marked `slow`, on 8 xdist workers (`--dist loadfile`),
+  about 75 s on the laptop. Needs only the `[test]` extra.
+- **`make slow`**: the three tests marked `slow` (`test_residual_derivs_match_autodiff`,
+  `test_derivatives_vs_ift_oracle`, `test_span_wagner_bit_for_bit`), each 75 to 110 s, run on 3
+  workers. A change to the Helmholtz derivatives, the fast path or the Span-Wagner backend runs
+  it before its commit; the acceptance bar below counts these tests.
+- **`make gate`**: the commit gate, run as `gate <repo path>`. It is `make test` with the
+  `pytest_budget` plugin loaded, which fails any test not marked `slow` whose setup + call +
+  teardown runs over `TEST_BUDGET_S` (30 s; the slowest unmarked test takes about 22 s under
+  the 8 workers), with "mark it slow or shrink it". `gate` fails a run longer than
+  `GATE_BUDGET_S` (120 s). Both budgets live in the `Makefile`.
+
+CI runs `pytest tests/ -v`: every test, both tiers, without the budget plugin, which is loaded
+only by `make gate` so a clone without it runs the suite unchanged.
+
 ## Critical rules
 
 **The public API surface is the contract: keep it stable and single-sourced.**

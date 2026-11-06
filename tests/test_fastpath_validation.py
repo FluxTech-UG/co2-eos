@@ -44,6 +44,7 @@ def test_properties_vs_oracle(envelope):
         assert e.max() < 5e-10, f"{q}: max rel {e.max():.3e}"
 
 
+@pytest.mark.slow
 def test_derivatives_vs_ift_oracle(envelope):
     """d(q)/d(ρ,u), forward and reverse, ≤ 1e-9 vs IFT-oracle references."""
     rho, u, _ = envelope
