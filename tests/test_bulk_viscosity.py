@@ -1,7 +1,7 @@
 """Bulk viscosity ζ = ζ_vib + ζ_crit (0.5.0).
 
-The reference table is the one computed for the 1DSim4 bulk-viscosity study
-(2026-10-28) with CoolProp's HEOS properties fed into the same model:
+The reference table was computed (2026-10-28) with CoolProp's HEOS properties fed
+into the same model:
 Span-Wagner c, c_p, c_v and c_v⁰, Laesecke-Muzny μ, the Huber 2016
 Olchowy-Sengers ξ.  co2-eos implements the same correlations and agrees with
 CoolProp on those inputs to below 1e-8 (``test_accuracy_vs_coolprop``), so the
