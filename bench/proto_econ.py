@@ -33,7 +33,9 @@ jax.config.update("jax_enable_x64", True)
 from co2_eos import span_wagner as sw
 from co2_eos import helmholtz as hz
 from co2_eos import transport as tr
-from co2_eos import core
+from co2_eos import core as _core_mod
+
+core = _core_mod.for_eos("span_wagner")   # the Span-Wagner study
 import co2_eos
 
 # ── Static coefficient views (Python floats, folded at trace time) ─────────

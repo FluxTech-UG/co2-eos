@@ -7,47 +7,47 @@
 
 ### bench/compare.py
 _Before/after benchmark of the EOS hot path: original autodiff vs new analytic._
-- const NS  ·L24
-- const SUPER  ·L25
-- regime(n, seed=0)  ·L28
-- timed(fn, *args, repeat=50)  ·L37
-- @jax.jit before_invert(rho, u, phase)  ·L48
-- @jax.jit before_props(T, rho)  ·L52
-- @jax.jit before_full(rho, u, phase)  ·L56
-- main()  ·L69
+- const NS  ·L34
+- const SUPER  ·L35
+- regime(n, seed=0)  ·L38
+- timed(fn, *args, repeat=50)  ·L47
+- @jax.jit before_invert(rho, u, phase)  ·L58
+- @jax.jit before_props(T, rho)  ·L62
+- @jax.jit before_full(rho, u, phase)  ·L66
+- main()  ·L79
 
 ### bench/fixed_iters_study.py
 _Round-trip T error vs FIXED Newton iteration count, for candidate seeds._
-- make_points(Tlo, Thi, rlo, rhi, n=4000, seed=1)  ·L17
-- solve_fixed(rho, u, T0_fn, niters)  ·L26
-- const SEEDS  ·L37
-- main()  ·L44
+- make_points(Tlo, Thi, rlo, rhi, n=4000, seed=1)  ·L19
+- solve_fixed(rho, u, T0_fn, niters)  ·L28
+- const SEEDS  ·L39
+- main()  ·L46
 
 ### bench/profile_baseline.py
 _Baseline profiling of the co2-eos hot path (pre-redesign)._
-- const NS  ·L36
-- const REPEAT  ·L37
-- regime_grid(n, seed=0)  ·L43: Return (T, rho, u, phase) arrays of length n sampled in the regime.
-- time_call(fn, *args, repeat=REPEAT)  ·L57: Compile, warm up, then time `fn(*args)` over `repeat` runs.
-- @jax.jit consumer_hot_path(rho, u, phase)  ·L77
-- _count_one(rho, u)  ·L92
-- newton_iteration_counts(T, rho, u)  ·L117
-- main()  ·L121
+- const NS  ·L46
+- const REPEAT  ·L47
+- regime_grid(n, seed=0)  ·L53: Return (T, rho, u, phase) arrays of length n sampled in the regime.
+- time_call(fn, *args, repeat=REPEAT)  ·L67: Compile, warm up, then time `fn(*args)` over `repeat` runs.
+- @jax.jit consumer_hot_path(rho, u, phase)  ·L87
+- _count_one(rho, u)  ·L102
+- newton_iteration_counts(T, rho, u)  ·L127
+- main()  ·L131
 
 ### bench/profile_hotpath.py
 _Profile INSIDE properties_from_rho_u: where the per-eval microseconds go._
-- const NS  ·L46
-- const REPEAT  ·L47
-- envelope(n, seed=0)  ·L53: (T, rho, u) sampled uniformly in the consumers' operating box.
-- time_call(fn, *args, repeat=REPEAT)  ·L62: Compile + warm up, then median seconds/call over `repeat` runs.
-- const _EOS  ·L78
-- @jax.jit f_bundle(tau, delta)  ·L88
-- const _TAU_REF  ·L92
-- @jax.jit f_chi_ref(delta)  ·L96: Exactly the extra Helmholtz work the critical enhancement does.
-- const _OPS  ·L103
-- hlo_census(fn, *args)  ·L107: Count transcendental-ish ops in the optimized HLO of fn(*args).
-- newton_convergence(n=20000, seed=7)  ·L119: |T_k - T_true| percentiles after k fixed Newton steps from the table seed.
-- main()  ·L149
+- const _EOS  ·L48
+- const NS  ·L52
+- const REPEAT  ·L53
+- envelope(n, seed=0)  ·L59: (T, rho, u) sampled uniformly in the consumers' operating box.
+- time_call(fn, *args, repeat=REPEAT)  ·L68: Compile + warm up, then median seconds/call over `repeat` runs.
+- @jax.jit f_bundle(tau, delta)  ·L91
+- const _TAU_REF  ·L95
+- @jax.jit f_chi_ref(delta)  ·L99: Exactly the extra Helmholtz work the critical enhancement does.
+- const _OPS  ·L106
+- hlo_census(fn, *args)  ·L110: Count transcendental-ish ops in the optimized HLO of fn(*args).
+- newton_convergence(n=20000, seed=7)  ·L122: |T_k - T_true| percentiles after k fixed Newton steps from the table seed.
+- main()  ·L152
 
 ### bench/proto_chebsurf.py
 _Prototype D probe: can a tensor-Chebyshev surface replace the residual sum?_
@@ -59,71 +59,71 @@ _Prototype D probe: can a tensor-Chebyshev surface replace the residual sum?_
 
 ### bench/proto_econ.py
 _Prototype A/B: transcendental-economized Span-Wagner kernels, measured._
-- const _N  ·L41
-- const _D  ·L42
-- const _T  ·L43
-- const _L  ·L44
-- const _GN  ·L46
-- const _GD  ·L47
-- const _GT  ·L48
-- const _GETA  ·L49
-- const _GBETA  ·L50
-- const _GGAMMA  ·L51
-- const _GEPS  ·L52
-- const _NAN_  ·L54
-- const _NAA  ·L55
-- const _NAB  ·L56
-- const _NA_P  ·L57
-- const _NA_BIGA  ·L59
-- const _NA_BIGB  ·L60
-- const _NA_BIGC  ·L61
-- const _NA_BIGD  ·L62
-- const _TPOWS  ·L70
-- _tau_ladder(tau)  ·L75: All distinct tau^t (t in _TPOWS) via 2 sqrts + multiplies.
-- _delta_ladder(delta, dmax)  ·L109: delta^1..dmax by successive multiplication (dict of int -> value).
-- residual_derivs_econ(tau, delta)  ·L121: (ar, ar_d, ar_t, ar_dd, ar_tt, ar_dt): exact SW96, economized.
-- const _TPOLY  ·L264
-- const _TP_IDX  ·L265
-- const _W_T  ·L266
-- const _W_TT  ·L267
-- residual_tau_prep_econ(delta)  ·L270: delta-invariant state for the tau-only inner loop (economized).
-- residual_tau_fast_econ(tau, dstate)  ·L299: (ar_t, ar_tt) from precomputed delta-state, economized per-iteration.
-- const _TAU_REF  ·L373
-- _dpdrho_ref_exact(delta)  ·L377
-- fit_chi_ref_cheb(deg)  ·L382
-- chi_ref_cheb(delta, coefs)  ·L391: Clenshaw evaluation of the fitted dp/drho|_(T_ref) factor.
-- _grid(n=300)  ·L405: (tau, delta) covering envelope + margins incl. tight near-critical.
-- time_call(fn, *args, repeat=200)  ·L421
-- main()  ·L432
+- const _N  ·L43
+- const _D  ·L44
+- const _T  ·L45
+- const _L  ·L46
+- const _GN  ·L48
+- const _GD  ·L49
+- const _GT  ·L50
+- const _GETA  ·L51
+- const _GBETA  ·L52
+- const _GGAMMA  ·L53
+- const _GEPS  ·L54
+- const _NAN_  ·L56
+- const _NAA  ·L57
+- const _NAB  ·L58
+- const _NA_P  ·L59
+- const _NA_BIGA  ·L61
+- const _NA_BIGB  ·L62
+- const _NA_BIGC  ·L63
+- const _NA_BIGD  ·L64
+- const _TPOWS  ·L72
+- _tau_ladder(tau)  ·L77: All distinct tau^t (t in _TPOWS) via 2 sqrts + multiplies.
+- _delta_ladder(delta, dmax)  ·L111: delta^1..dmax by successive multiplication (dict of int -> value).
+- residual_derivs_econ(tau, delta)  ·L123: (ar, ar_d, ar_t, ar_dd, ar_tt, ar_dt): exact SW96, economized.
+- const _TPOLY  ·L266
+- const _TP_IDX  ·L267
+- const _W_T  ·L268
+- const _W_TT  ·L269
+- residual_tau_prep_econ(delta)  ·L272: delta-invariant state for the tau-only inner loop (economized).
+- residual_tau_fast_econ(tau, dstate)  ·L301: (ar_t, ar_tt) from precomputed delta-state, economized per-iteration.
+- const _TAU_REF  ·L375
+- _dpdrho_ref_exact(delta)  ·L379
+- fit_chi_ref_cheb(deg)  ·L384
+- chi_ref_cheb(delta, coefs)  ·L393: Clenshaw evaluation of the fitted dp/drho|_(T_ref) factor.
+- _grid(n=300)  ·L407: (tau, delta) covering envelope + margins incl. tight near-critical.
+- time_call(fn, *args, repeat=200)  ·L423
+- main()  ·L434
 
 ### bench/proto_seed_v2.py
 _Prototype C: seed-table v2: dome-safe fill + denser grid -> fewer iters._
-- const NU  ·L34
-- build_v2()  ·L37
-- make_seed_fn(rho_grid, u_grid, T0)  ·L77
-- conv_stats(seed_fn, label, n=40000)  ·L98
-- main()  ·L128
+- const NU  ·L38
+- build_v2()  ·L41
+- make_seed_fn(rho_grid, u_grid, T0)  ·L81
+- conv_stats(seed_fn, label, n=40000)  ·L102
+- main()  ·L132
 
 ### bench/seed_study.py
 _Pick the (ρ, u) → T Newton seed: compare seed error and iteration counts._
-- make_points(Tlo, Thi, rlo, rhi, n=2000, seed=0)  ·L23
-- seed_crude(rho, u)  ·L32
-- seed_const(rho, u)  ·L36
-- _ideal_u(T)  ·L40
-- seed_ideal(rho, u)  ·L48: Invert ideal-gas u_id(T)=u with a few fixed Newton steps from 300 K.
-- newton_iters_to_conv(rho, u, T0)  ·L61: Count analytic-Newton iterations until |step| < 1e-10 K (cap 40).
-- report(name, T_true, rho, u, T0)  ·L79
-- main()  ·L88
+- make_points(Tlo, Thi, rlo, rhi, n=2000, seed=0)  ·L25
+- seed_crude(rho, u)  ·L34
+- seed_const(rho, u)  ·L38
+- _ideal_u(T)  ·L42
+- seed_ideal(rho, u)  ·L50: Invert ideal-gas u_id(T)=u with a few fixed Newton steps from 300 K.
+- newton_iters_to_conv(rho, u, T0)  ·L63: Count analytic-Newton iterations until |step| < 1e-10 K (cap 40).
+- report(name, T_true, rho, u, T0)  ·L81
+- main()  ·L90
 
 ### bench/seed_table_study.py
 _Does a precomputed T0(rho,u) table seed collapse the near-critical iters?_
-- u_of(T, rho)  ·L11
-- make_points(Tlo, Thi, rlo, rhi, n=6000, seed=3)  ·L14
-- build_table()  ·L25
-- table_seed(rho, u)  ·L45
-- affine_seed(rho, u)  ·L61
-- solve_fixed(rho, u, seed_fn, n)  ·L64
-- main()  ·L74
+- u_of(T, rho)  ·L13
+- make_points(Tlo, Thi, rlo, rhi, n=6000, seed=3)  ·L16
+- build_table()  ·L27
+- table_seed(rho, u)  ·L47
+- affine_seed(rho, u)  ·L63
+- solve_fixed(rho, u, seed_fn, n)  ·L66
+- main()  ·L76
 
 ### bench/validate_analytic.py
 _Validate the hand-coded analytic Helmholtz derivatives against jax.grad._
@@ -132,37 +132,37 @@ _Validate the hand-coded analytic Helmholtz derivatives against jax.grad._
 
 ### bench/validate_core.py
 _Validate the redesigned core: round-trip, properties, seed/iteration count._
-- pts(Tlo, Thi, rlo, rhi, n, seed)  ·L7
-- roundtrip(label, Tlo, Thi, rlo, rhi, n=8000, seed=11)  ·L15
-- seed_quality(Tlo, Thi, rlo, rhi, n=8000, seed=5)  ·L25
-- properties()  ·L33
-- main()  ·L48
+- pts(Tlo, Thi, rlo, rhi, n, seed)  ·L9
+- roundtrip(label, Tlo, Thi, rlo, rhi, n=8000, seed=11)  ·L17
+- seed_quality(Tlo, Thi, rlo, rhi, n=8000, seed=5)  ·L27
+- properties()  ·L35
+- main()  ·L50
 
 ### bench/validate_fastpath.py
 _Validation harness: the fast (ρ, u) path vs an independent reference chain._
 - const _EOS  ·L40
-- _T_from_rho_u_ref(rho, u)  ·L50: To-convergence Newton on the oracle u(T, ρ); crude seed, no table.
-- const _A0  ·L71
-- const _RF_B  ·L74
-- const _RF_T  ·L76
-- const _LAM0_L  ·L77
-- const _LAM_B  ·L78
-- const _M  ·L82
-- const _R_MOLAR  ·L83
-- const _RHOC_MOLAR  ·L84
-- const _PC  ·L85
-- const _TT_TRIPLE  ·L86
-- const _RHO_TL  ·L87
-- const _ETA_TL  ·L88
-- _visc_ref(T, rho)  ·L91
-- _cond_ref(T, rho, mu)  ·L109
-- reference_state(rho, u)  ·L148: Full reference state dict at scalar (ρ, u) from the oracle chain.
-- reference_derivs(rho, u, qname)  ·L169
-- envelope_single_phase(n, seed=17)  ·L193
-- const QUANTITIES  ·L215
-- rel(a, b, floor)  ·L219
-- const FLOORS  ·L226
-- main()  ·L231
+- _T_from_rho_u_ref(rho, u)  ·L51: To-convergence Newton on the oracle u(T, ρ); crude seed, no table.
+- const _A0  ·L72
+- const _RF_B  ·L75
+- const _RF_T  ·L77
+- const _LAM0_L  ·L78
+- const _LAM_B  ·L79
+- const _M  ·L83
+- const _R_MOLAR  ·L84
+- const _RHOC_MOLAR  ·L85
+- const _PC  ·L86
+- const _TT_TRIPLE  ·L87
+- const _RHO_TL  ·L88
+- const _ETA_TL  ·L89
+- _visc_ref(T, rho)  ·L92
+- _cond_ref(T, rho, mu)  ·L110
+- reference_state(rho, u)  ·L149: Full reference state dict at scalar (ρ, u) from the oracle chain.
+- reference_derivs(rho, u, qname)  ·L170
+- envelope_single_phase(n, seed=17)  ·L194
+- const QUANTITIES  ·L216
+- rel(a, b, floor)  ·L220
+- const FLOORS  ·L227
+- main()  ·L232
 
 ### co2_eos/__init__.py
 _CO2-EOS: Differentiable CO₂ thermodynamic properties in JAX._
@@ -170,25 +170,25 @@ _CO2-EOS: Differentiable CO₂ thermodynamic properties in JAX._
 - const VAPOR  ·L97
 - const SUPERCRITICAL  ·L98
 - const AUTO  ·L99
-- saturation_pressure(T, eos=DEFAULT_EOS)  ·L118: Saturation pressure P_sat [Pa] at temperature T [K].
-- saturation_temperature(P, eos=DEFAULT_EOS)  ·L123: Saturation temperature T_sat [K] at pressure P [Pa].
-- saturation_densities(T, eos=DEFAULT_EOS)  ·L128: Saturated (rho_l, rho_v) [kg/m³] at temperature T [K].
-- saturation_densities_P(P, eos=DEFAULT_EOS)  ·L133: Saturated (rho_l, rho_v) [kg/m³] at pressure P [Pa].
-- saturation_enthalpies(T, eos=DEFAULT_EOS)  ·L138: Saturated (h_l, h_v) [J/kg] at temperature T [K].
-- saturation_enthalpies_P(P, eos=DEFAULT_EOS)  ·L143: Saturated (h_l, h_v) [J/kg] at pressure P [Pa].
-- saturation_entropies(T, eos=DEFAULT_EOS)  ·L148: Saturated (s_l, s_v) [J/(kg·K)] at temperature T [K].
-- saturation_entropies_P(P, eos=DEFAULT_EOS)  ·L153: Saturated (s_l, s_v) [J/(kg·K)] at pressure P [Pa].
-- @_jit viscosity(T, rho, eos=DEFAULT_EOS)  ·L162: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
-- @_jit thermal_conductivity(T, rho, eos=DEFAULT_EOS)  ·L174: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
-- @_jit bulk_viscosity(T, rho, eos=DEFAULT_EOS)  ·L182: Bulk viscosity ζ [Pa·s] at scalar (T, ρ). vmap for batches.
-- @_jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L200: Full thermodynamic + transport state from (ρ, u). Batched.
-- @_jit properties_from_rho_T(rho, T, eos=DEFAULT_EOS)  ·L230: Full thermodynamic + transport state from (ρ, T). Batched.
-- @_jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L259: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
-- @_jit properties(T, rho, eos=DEFAULT_EOS)  ·L279: Full thermodynamic + transport state at scalar (T, ρ).
-- @_jit state_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L290: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
-- @_jit density_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L305: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
-- @_jit state_from_Ph(P, h, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L314: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
-- @_jit state_from_Du(rho, u, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L330: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
+- saturation_pressure(T, eos=DEFAULT_EOS)  ·L117: Saturation pressure P_sat [Pa] at temperature T [K].
+- saturation_temperature(P, eos=DEFAULT_EOS)  ·L122: Saturation temperature T_sat [K] at pressure P [Pa].
+- saturation_densities(T, eos=DEFAULT_EOS)  ·L127: Saturated (rho_l, rho_v) [kg/m³] at temperature T [K].
+- saturation_densities_P(P, eos=DEFAULT_EOS)  ·L132: Saturated (rho_l, rho_v) [kg/m³] at pressure P [Pa].
+- saturation_enthalpies(T, eos=DEFAULT_EOS)  ·L137: Saturated (h_l, h_v) [J/kg] at temperature T [K].
+- saturation_enthalpies_P(P, eos=DEFAULT_EOS)  ·L142: Saturated (h_l, h_v) [J/kg] at pressure P [Pa].
+- saturation_entropies(T, eos=DEFAULT_EOS)  ·L147: Saturated (s_l, s_v) [J/(kg·K)] at temperature T [K].
+- saturation_entropies_P(P, eos=DEFAULT_EOS)  ·L152: Saturated (s_l, s_v) [J/(kg·K)] at pressure P [Pa].
+- @_jit viscosity(T, rho, eos=DEFAULT_EOS)  ·L161: Dynamic viscosity μ [Pa·s] at scalar (T, ρ). vmap for batches.
+- @_jit thermal_conductivity(T, rho, eos=DEFAULT_EOS)  ·L173: Thermal conductivity λ [W/(m·K)] at scalar (T, ρ). vmap for batches.
+- @_jit bulk_viscosity(T, rho, eos=DEFAULT_EOS)  ·L181: Bulk viscosity ζ [Pa·s] at scalar (T, ρ). vmap for batches.
+- @_jit properties_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L199: Full thermodynamic + transport state from (ρ, u). Batched.
+- @_jit properties_from_rho_T(rho, T, eos=DEFAULT_EOS)  ·L229: Full thermodynamic + transport state from (ρ, T). Batched.
+- @_jit temperature_from_rho_u(rho, u, phase_hint=SUPERCRITICAL, eos=DEFAULT_EOS)  ·L258: Temperature T [K] such that u(T,ρ)=u at fixed ρ. Batched.
+- @_jit properties(T, rho, eos=DEFAULT_EOS)  ·L278: Full thermodynamic + transport state at scalar (T, ρ).
+- @_jit state_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L289: Full state at (P, T). Phase-aware Halley solve for ρ, then derive all.
+- @_jit density_from_PT(P, T, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L304: Density [kg/m³] at scalar (P, T). Phase-aware Halley solve.
+- @_jit state_from_Ph(P, h, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L313: Full state at (P, h). Dome-aware at subcritical P; else 2-D Newton.
+- @_jit state_from_Du(rho, u, phase_hint=AUTO, eos=DEFAULT_EOS)  ·L329: Full state at scalar (ρ, u). Scalar form of ``properties_from_rho_u``.
 
 ### co2_eos/backends.py
 _The equation-of-state backends and the static switch that selects one._
@@ -214,7 +214,7 @@ _Redesigned high-performance EOS core: analytic derivatives, fused passes._
 - _build(eos)  ·L61: The fused kernels on backend ``eos``; returns them as a namespace.
 - const _BUILT  ·L337
 - for_eos(eos)  ·L340: The kernels of backend ``eos`` (built once, at first request).
-- const _SW  ·L351
+- const _DEFAULT  ·L351
 - const _HAVE_SEED  ·L352
 - const _T_MIN  ·L353
 
@@ -266,7 +266,7 @@ _Thermodynamic inversions: pure JAX, JIT-compilable, vmappable,_
 - _build(eos)  ·L35: The inversions on backend ``eos``, returned as a namespace.
 - const _BUILT  ·L793
 - for_eos(eos)  ·L796: The inversions of backend ``eos``.
-- const _SW  ·L801
+- const _DEFAULT  ·L801
 - const _BISECT_HI  ·L836
 - const _BISECT_ITERS  ·L837
 - const _BISECT_LO  ·L838
@@ -386,20 +386,20 @@ _Coefficients of the reference gases: the one home of every number, cited._
 
 ### co2_eos/saturation.py
 _CO2 saturation curve lookups: pure JAX, JIT-compilable._
-- const _TABLES  ·L37
-- _ensure_loaded(eos=SPAN_WAGNER)  ·L40: Load the backend's saturation table on first use. Call outside JIT.
-- _table(eos)  ·L52
-- _eval_spline(x, breaks, coeffs)  ·L59: Evaluate cubic spline at x.
-- saturation_pressure(T, eos=SPAN_WAGNER)  ·L83: Saturation pressure P_sat [Pa] at temperature T [K].
-- saturation_densities(T, eos=SPAN_WAGNER)  ·L93: Saturated liquid and vapor densities [kg/m3] at temperature T [K].
-- saturation_enthalpies_T(T, eos=SPAN_WAGNER)  ·L105: Saturated liquid and vapor enthalpies [J/kg] at temperature T [K].
-- saturation_entropies(T, eos=SPAN_WAGNER)  ·L117: Saturated liquid and vapor entropies [J/(kg*K)] at temperature T [K].
-- saturation_temperature(P, eos=SPAN_WAGNER)  ·L131: Saturation temperature T_sat [K] at pressure P [Pa].
-- saturation_enthalpies(P, eos=SPAN_WAGNER)  ·L140: Saturated liquid and vapor enthalpies [J/kg] at pressure P [Pa].
-- saturation_densities_P(P, eos=SPAN_WAGNER)  ·L152: Saturated liquid and vapor densities [kg/m3] at pressure P [Pa].
-- saturation_entropies_P(P, eos=SPAN_WAGNER)  ·L164: Saturated liquid and vapor entropies [J/(kg*K)] at pressure P [Pa].
-- const _LOOKUPS  ·L176
-- for_eos(eos)  ·L182: The lookups bound to backend ``eos``, under their module names.
+- const _TABLES  ·L36
+- _ensure_loaded(eos=DEFAULT_EOS)  ·L39: Load the backend's saturation table on first use. Call outside JIT.
+- _table(eos)  ·L51
+- _eval_spline(x, breaks, coeffs)  ·L58: Evaluate cubic spline at x.
+- saturation_pressure(T, eos=DEFAULT_EOS)  ·L82: Saturation pressure P_sat [Pa] at temperature T [K].
+- saturation_densities(T, eos=DEFAULT_EOS)  ·L92: Saturated liquid and vapor densities [kg/m3] at temperature T [K].
+- saturation_enthalpies_T(T, eos=DEFAULT_EOS)  ·L104: Saturated liquid and vapor enthalpies [J/kg] at temperature T [K].
+- saturation_entropies(T, eos=DEFAULT_EOS)  ·L116: Saturated liquid and vapor entropies [J/(kg*K)] at temperature T [K].
+- saturation_temperature(P, eos=DEFAULT_EOS)  ·L130: Saturation temperature T_sat [K] at pressure P [Pa].
+- saturation_enthalpies(P, eos=DEFAULT_EOS)  ·L139: Saturated liquid and vapor enthalpies [J/kg] at pressure P [Pa].
+- saturation_densities_P(P, eos=DEFAULT_EOS)  ·L151: Saturated liquid and vapor densities [kg/m3] at pressure P [Pa].
+- saturation_entropies_P(P, eos=DEFAULT_EOS)  ·L163: Saturated liquid and vapor entropies [J/(kg*K)] at pressure P [Pa].
+- const _LOOKUPS  ·L175
+- for_eos(eos)  ·L181: The lookups bound to backend ``eos``, under their module names.
 
 ### co2_eos/span_wagner.py
 _Span-Wagner (1996) equation of state for CO₂: pure JAX implementation._
@@ -516,7 +516,7 @@ _CO₂ transport property correlations: pure JAX implementation._
 - _build(eos)  ·L281: The EOS-coupled transport kernels on backend ``eos``, as a namespace.
 - const _BUILT  ·L526
 - for_eos(eos)  ·L529: The EOS-coupled kernels of backend ``eos`` (built once, on request).
-- const _SW  ·L540
+- const _DEFAULT  ·L540
 - const _HAVE_CHI_CHEB  ·L541
 - @jax.jit viscosity(T, rho)  ·L558: Dynamic viscosity μ [Pa·s]. Batched over leading axis.
 - @jax.jit thermal_conductivity(T, rho)  ·L572: Thermal conductivity λ [W/(m·K)]. Batched over leading axis.
@@ -595,8 +595,10 @@ _Generate the (ρ, u) → T Newton seed table for the inversion hot path._
 - _(no top-level symbols)_
 
 ### tests/span_wagner_api.py
-_co2_eos's public API with ``eos="span_wagner"`` bound on every function._
-- _bound(name)  ·L17
+_co2_eos with ``eos="span_wagner"`` bound: the public API and the submodules._
+- const SW  ·L31
+- _bound(name)  ·L34
+- _instance(module, **extra)  ·L44
 
 ### tests/span_wagner_probe.py
 _Evaluate the public API's Span-Wagner path on a fixed grid; write an .npz._
@@ -658,41 +660,42 @@ _Bulk viscosity ζ = ζ_vib + ζ_crit (0.5.0)._
 _The default backend is NIST IR 8608 (2026), ``eos="nist2026"``._
 - test_default_eos_is_nist2026()  ·L15
 - test_every_public_function_defaults_to_nist2026()  ·L19
-- test_default_call_equals_named_nist2026_call()  ·L29
+- test_submodule_names_are_the_nist2026_instance()  ·L29: Every generic module-level name of a submodule is its nist2026 form.
+- test_default_call_equals_named_nist2026_call()  ·L52
 
 ### tests/test_density_from_PT_branch.py
 _density_from_PT below TC must land on the stable branch under the auto hint._
-- const CP  ·L32
-- const RTOL  ·L34
-- _ref(T, P)  ·L37
-- @pytest.mark.parametrize test_regression_points_match_liquid_hint_and_coolprop(T, P)  ·L49
-- const _MELT_MARGIN  ·L65
-- _melting_pressure(T)  ·L68
-- _subcritical_grid()  ·L73
-- @pytest.mark.parametrize test_auto_hint_follows_P_sat_below_TC(T, P, side)  ·L84
-- test_jit_vmap_mixed_hints()  ·L98
-- test_gradient_on_the_liquid_branch_near_the_old_hole()  ·L109
-- test_branch_guard_rejects_a_dome_root_under_auto_only()  ·L118
+- const CP  ·L33
+- const RTOL  ·L35
+- _ref(T, P)  ·L38
+- @pytest.mark.parametrize test_regression_points_match_liquid_hint_and_coolprop(T, P)  ·L50
+- const _MELT_MARGIN  ·L66
+- _melting_pressure(T)  ·L69
+- _subcritical_grid()  ·L74
+- @pytest.mark.parametrize test_auto_hint_follows_P_sat_below_TC(T, P, side)  ·L85
+- test_jit_vmap_mixed_hints()  ·L99
+- test_gradient_on_the_liquid_branch_near_the_old_hole()  ·L110
+- test_branch_guard_rejects_a_dome_root_under_auto_only()  ·L119
 
 ### tests/test_dome_detection.py
 _Tests for two-phase dome detection in state_from_Ph._
-- const P_TEST  ·L26
-- @pytest.fixture dome_data()  ·L30: Precompute saturation data at P_TEST.
-- class TestDomeSweepLiquid  ·L44: Enthalpy sweep at P=7.1 MPa with LIQUID hint.
-  - test_all_finite(self, dome_data)  ·L47: All returned T and ρ are finite across h_l-50kJ to h_v+50kJ.
-  - test_T_equals_Tsat_inside_dome(self, dome_data)  ·L61: Inside dome, T should equal T_sat(P).
-  - test_rho_equals_rho_l_inside_dome(self, dome_data)  ·L73: Inside dome with LIQUID hint, ρ should equal ρ_l(P).
-- class TestDomeSweepVapor  ·L86: Enthalpy sweep at P=7.1 MPa with VAPOR hint.
-  - test_all_finite(self, dome_data)  ·L89: All returned T and ρ are finite across h_l-50kJ to h_v+50kJ.
-  - test_rho_equals_rho_v_inside_dome(self, dome_data)  ·L103: Inside dome with VAPOR hint, ρ should equal ρ_v(P).
-- class TestDomeCpPositive  ·L116: Cp computed from dome-returned (T, ρ) must be positive.
-  - test_cp_positive_liquid(self, dome_data)  ·L119: Cp > 0 across entire sweep with LIQUID hint.
-  - test_cp_positive_vapor(self, dome_data)  ·L134: Cp > 0 across entire sweep with VAPOR hint.
-- class TestDomeGradients  ·L150: Gradients through state_from_Ph at a point inside the dome.
-  - test_grad_finite_inside_dome(self, dome_data)  ·L153: jax.grad returns finite values for a point inside the dome.
-  - test_jvp_finite_inside_dome(self, dome_data)  ·L177: JVP returns finite tangents for a point inside the dome.
-- class TestDomeSupercriticalBypass  ·L191: At supercritical P, dome detection should not activate.
-  - test_supercritical_unchanged(self)  ·L194: state_from_Ph at P > PC should behave exactly as before.
+- const P_TEST  ·L23
+- @pytest.fixture dome_data()  ·L27: Precompute saturation data at P_TEST.
+- class TestDomeSweepLiquid  ·L41: Enthalpy sweep at P=7.1 MPa with LIQUID hint.
+  - test_all_finite(self, dome_data)  ·L44: All returned T and ρ are finite across h_l-50kJ to h_v+50kJ.
+  - test_T_equals_Tsat_inside_dome(self, dome_data)  ·L58: Inside dome, T should equal T_sat(P).
+  - test_rho_equals_rho_l_inside_dome(self, dome_data)  ·L70: Inside dome with LIQUID hint, ρ should equal ρ_l(P).
+- class TestDomeSweepVapor  ·L83: Enthalpy sweep at P=7.1 MPa with VAPOR hint.
+  - test_all_finite(self, dome_data)  ·L86: All returned T and ρ are finite across h_l-50kJ to h_v+50kJ.
+  - test_rho_equals_rho_v_inside_dome(self, dome_data)  ·L100: Inside dome with VAPOR hint, ρ should equal ρ_v(P).
+- class TestDomeCpPositive  ·L113: Cp computed from dome-returned (T, ρ) must be positive.
+  - test_cp_positive_liquid(self, dome_data)  ·L116: Cp > 0 across entire sweep with LIQUID hint.
+  - test_cp_positive_vapor(self, dome_data)  ·L131: Cp > 0 across entire sweep with VAPOR hint.
+- class TestDomeGradients  ·L147: Gradients through state_from_Ph at a point inside the dome.
+  - test_grad_finite_inside_dome(self, dome_data)  ·L150: jax.grad returns finite values for a point inside the dome.
+  - test_jvp_finite_inside_dome(self, dome_data)  ·L174: JVP returns finite tangents for a point inside the dome.
+- class TestDomeSupercriticalBypass  ·L188: At supercritical P, dome detection should not activate.
+  - test_supercritical_unchanged(self)  ·L191: state_from_Ph at P > PC should behave exactly as before.
 
 ### tests/test_fastpath_validation.py
 _The economized (ρ, u) fast path must match the independent oracle chain._
@@ -705,41 +708,41 @@ _The economized (ρ, u) fast path must match the independent oracle chain._
 
 ### tests/test_inversion_gradients.py
 _Forward-mode (jvp) and reverse-mode (grad/vjp) gradients through every inversion._
-- finite_diff(f, x, idx, rel_eps=1e-07)  ·L32: Central finite difference of f with respect to x[idx].
-- assert_close(a, b, rtol=0.0001, atol=1e-08, name='')  ·L51: Assert two values are close, with helpful error message.
-- const T_SC  ·L66
-- const P_SC  ·L67
-- const HINT_SC  ·L68
-- const T_LIQ  ·L71
-- const P_LIQ  ·L72
-- const HINT_LIQ  ·L73
-- const T_VAP  ·L76
-- const P_VAP  ·L77
-- const HINT_VAP  ·L78
-- class TestDensityFromPT  ·L85: Forward and reverse AD through density_from_PT.
-  - @pytest.fixture test_point(self, request)  ·L93
-  - test_jvp_finite(self, test_point)  ·L97
-  - test_grad_finite(self, test_point)  ·L106
-  - test_jvp_matches_fd(self, test_point)  ·L113
-  - test_vjp_matches_fd(self, test_point)  ·L127
-- class TestStateFromPh  ·L143: Forward and reverse AD through state_from_Ph.
-  - @pytest.fixture test_point(self, request)  ·L151
-  - test_jvp_finite(self, test_point)  ·L161
-  - test_grad_finite(self, test_point)  ·L170
-  - test_jvp_matches_fd(self, test_point)  ·L179
-  - test_vjp_matches_fd(self, test_point)  ·L195
-- class TestTemperatureFromDu  ·L213: Forward and reverse AD through temperature_from_Du.
-  - @pytest.fixture test_point(self, request)  ·L220
-  - test_jvp_finite(self, test_point)  ·L227
-  - test_grad_finite(self, test_point)  ·L236
-  - test_jvp_matches_fd(self, test_point)  ·L243
-  - test_vjp_matches_fd(self, test_point)  ·L253
-- class TestStateFromDu  ·L267: Forward and reverse AD through state_from_Du.
-  - @pytest.fixture test_point(self, request)  ·L274
-  - test_jvp_finite(self, test_point)  ·L281
-  - test_grad_finite(self, test_point)  ·L290
-  - test_jvp_matches_fd(self, test_point)  ·L299
-  - test_vjp_matches_fd(self, test_point)  ·L317
+- finite_diff(f, x, idx, rel_eps=1e-07)  ·L30: Central finite difference of f with respect to x[idx].
+- assert_close(a, b, rtol=0.0001, atol=1e-08, name='')  ·L49: Assert two values are close, with helpful error message.
+- const T_SC  ·L64
+- const P_SC  ·L65
+- const HINT_SC  ·L66
+- const T_LIQ  ·L69
+- const P_LIQ  ·L70
+- const HINT_LIQ  ·L71
+- const T_VAP  ·L74
+- const P_VAP  ·L75
+- const HINT_VAP  ·L76
+- class TestDensityFromPT  ·L83: Forward and reverse AD through density_from_PT.
+  - @pytest.fixture test_point(self, request)  ·L91
+  - test_jvp_finite(self, test_point)  ·L95
+  - test_grad_finite(self, test_point)  ·L104
+  - test_jvp_matches_fd(self, test_point)  ·L111
+  - test_vjp_matches_fd(self, test_point)  ·L125
+- class TestStateFromPh  ·L141: Forward and reverse AD through state_from_Ph.
+  - @pytest.fixture test_point(self, request)  ·L149
+  - test_jvp_finite(self, test_point)  ·L159
+  - test_grad_finite(self, test_point)  ·L168
+  - test_jvp_matches_fd(self, test_point)  ·L177
+  - test_vjp_matches_fd(self, test_point)  ·L193
+- class TestTemperatureFromDu  ·L211: Forward and reverse AD through temperature_from_Du.
+  - @pytest.fixture test_point(self, request)  ·L218
+  - test_jvp_finite(self, test_point)  ·L225
+  - test_grad_finite(self, test_point)  ·L234
+  - test_jvp_matches_fd(self, test_point)  ·L241
+  - test_vjp_matches_fd(self, test_point)  ·L251
+- class TestStateFromDu  ·L265: Forward and reverse AD through state_from_Du.
+  - @pytest.fixture test_point(self, request)  ·L272
+  - test_jvp_finite(self, test_point)  ·L279
+  - test_grad_finite(self, test_point)  ·L288
+  - test_jvp_matches_fd(self, test_point)  ·L297
+  - test_vjp_matches_fd(self, test_point)  ·L315
 
 ### tests/test_map_fresh.py
 _Guard: docs/MAP.md stays in sync with the source._
@@ -891,12 +894,12 @@ _The reference-gas backends (air, helium, argon) behind the ``eos=`` keyword._
 
 ### tests/test_rho_u_inversion.py
 _The (ρ, u) → T inversion and the fused properties_from_rho_u path._
-- _u(T, rho)  ·L23
-- @pytest.mark.parametrize test_roundtrip_under_1e8(label, Tlo, Thi, rlo, rhi)  ·L35
-- test_fused_matches_properties()  ·L45: properties_from_rho_u(ρ,u) == properties(T_recovered, ρ) elementwise.
-- _fd(f, x, i, eps=1e-06)  ·L66
-- @pytest.mark.parametrize test_inversion_gradients(T0, rho0)  ·L75
-- test_properties_from_rho_u_differentiable()  ·L93: grad through the fused path (e.g. dP/du) is finite and matches FD.
+- _u(T, rho)  ·L22
+- @pytest.mark.parametrize test_roundtrip_under_1e8(label, Tlo, Thi, rlo, rhi)  ·L34
+- test_fused_matches_properties()  ·L44: properties_from_rho_u(ρ,u) == properties(T_recovered, ρ) elementwise.
+- _fd(f, x, i, eps=1e-06)  ·L65
+- @pytest.mark.parametrize test_inversion_gradients(T0, rho0)  ·L74
+- test_properties_from_rho_u_differentiable()  ·L92: grad through the fused path (e.g. dP/du) is finite and matches FD.
 
 ### tests/test_span_wagner_bit_for_bit.py
 _The Span-Wagner backend, named with ``eos="span_wagner"``, is bit for bit 0.5.0._

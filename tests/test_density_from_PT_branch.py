@@ -26,8 +26,9 @@ jax.config.update("jax_enable_x64", True)
 
 from tests.span_wagner_api import co2 as co2_eos   # the Span-Wagner path, eos bound
 from co2_eos import span_wagner as sw
-from co2_eos import saturation as sat
-from co2_eos.inversions import _on_requested_branch
+from tests.span_wagner_api import inversions, saturation as sat   # Span-Wagner
+
+_on_requested_branch = inversions._on_requested_branch
 
 CP = pytest.importorskip("CoolProp.CoolProp")
 

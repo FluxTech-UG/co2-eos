@@ -12,15 +12,12 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from co2_eos.inversions import (
-    _state_from_Ph,
-    state_from_Ph,
-    LIQUID,
-    VAPOR,
-    SUPERCRITICAL,
-)
 from co2_eos import span_wagner as sw
-from co2_eos import saturation as sat
+from tests.span_wagner_api import inversions, saturation as sat   # Span-Wagner
+
+_state_from_Ph = inversions._state_from_Ph
+state_from_Ph = inversions.state_from_Ph
+LIQUID, VAPOR, SUPERCRITICAL = inversions.LIQUID, inversions.VAPOR, inversions.SUPERCRITICAL
 
 
 P_TEST = 7.1e6  # Pa, subcritical, well inside dome range
@@ -196,8 +193,7 @@ class TestDomeSupercriticalBypass:
         P = jnp.float64(10.0e6)  # supercritical
         T_ref = 320.0
         rho_ref = sw._scalar_pressure  # dummy; compute h from known state
-        from co2_eos.inversions import _density_from_PT
-        rho = _density_from_PT(jnp.float64(T_ref), P, SUPERCRITICAL)
+        rho = inversions._density_from_PT(jnp.float64(T_ref), P, SUPERCRITICAL)
         h = sw._scalar_enthalpy(jnp.float64(T_ref), rho)
 
         T_out, rho_out = _state_from_Ph(P, h, SUPERCRITICAL)

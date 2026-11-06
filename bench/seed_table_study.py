@@ -6,7 +6,9 @@ iteration round-trip error in the regime (incl. the near-critical corner).
 import jax, jax.numpy as jnp, numpy as np
 jax.config.update("jax_enable_x64", True)
 from co2_eos.span_wagner import TC, RHOC, R, T_TRIPLE
-from co2_eos import core
+from co2_eos import core as _core_mod
+
+core = _core_mod.for_eos("span_wagner")   # the Span-Wagner study
 
 def u_of(T, rho):
     return jax.vmap(lambda t, r: core._u_and_cv(t, r)[0])(T, rho)

@@ -4,29 +4,40 @@ All notable changes to co2-eos are documented here.
 
 ## [0.8.0] - 2026-11-06
 
-NIST IR 8608 (Lemmon, Harvey and Hellmann 2026) is the default backend:
-`DEFAULT_EOS` is `"nist2026"`, so every public function called without `eos=`
-reads the NIST surface.  `eos="span_wagner"` returns the 0.5.0 results bit for
+NIST IR 8608 (Lemmon, Harvey and Hellmann 2026) is the default backend, and
+every generic name in the package follows it: the public functions called
+without `eos=` and the submodules' module-level names (`core`, `inversions`,
+`saturation`, `transport`) read the NIST surface.  Span-Wagner is reached by
+its own name only, and `eos="span_wagner"` returns the 0.5.0 results bit for
 bit.
 
 ### Changed
 
-- `DEFAULT_EOS = NIST2026`.  A caller that needs Span-Wagner names it,
-  `eos="span_wagner"`.
-- The submodules' module-level names stay the Span-Wagner instance:
-  `co2_eos.saturation.*` defaults to `"span_wagner"`, like `inversions`,
-  `transport` and `span_wagner`, so a caller importing from the submodules
-  lands on one backend.  The package's `co2_eos.saturation_*` take `eos=` with
-  the package default.
+- `DEFAULT_EOS = NIST2026`.  A caller that needs Span-Wagner names it:
+  `eos="span_wagner"` on a public function, `<submodule>.for_eos("span_wagner")`
+  for a submodule's kernels, or the `span_wagner` module (and `helmholtz`, its
+  analytic kernel).
+- The submodules' module-level names are the nist2026 instance:
+  `core._thermo`, `core._state_from_rho_u`, `inversions.density_from_PT`,
+  `inversions.state_from_Ph`, `inversions.temperature_from_Du`,
+  `transport.thermal_conductivity`, `transport.bulk_viscosity` and the rest;
+  `co2_eos.saturation.*` defaults to `eos="nist2026"`.  A caller importing
+  from a submodule reads NIST unless it names Span-Wagner.  The transport
+  correlations keep their own parameters (and `transport.viscosity`, which reads
+  no EOS, returns the same values); their critical parts read NIST.
 - The table scripts' `--eos` defaults to `DEFAULT_EOS` (nist2026); Span-Wagner's
   tables are generated with `--eos span_wagner`.
+- The benches name the backend they run: `bench/validate_fastpath.py`,
+  `bench/profile_hotpath.py` and the Span-Wagner studies run `eos="span_wagner"`
+  end to end, against their Span-Wagner reference chain.
 - Tests: `tests/test_span_wagner_bit_for_bit.py` (with `tests/span_wagner_probe.py`)
-  checks `eos="span_wagner"`, and the submodules' names called with no `eos`,
-  against a `git archive` of 0.5.0; `tests/test_default_eos.py` checks the
-  default is nist2026 on every public function, the same bits as the named
-  call.  The tests that validate Span-Wagner (against CoolProp, the autodiff
-  oracle, the submodules) call it through `tests/span_wagner_api.py`, the
-  public API with `eos="span_wagner"` bound.
+  checks `eos="span_wagner"` and each submodule's `for_eos("span_wagner")`
+  kernels against a `git archive` of 0.5.0; `tests/test_default_eos.py` checks
+  the default is nist2026 on every public function and every submodule's
+  module-level name, the same bits as the named call.  The tests that validate
+  Span-Wagner (against CoolProp, the autodiff oracle) reach it through
+  `tests/span_wagner_api.py`: the public API with `eos="span_wagner"` bound, and
+  the submodules' Span-Wagner instances.
 
 ## [0.7.0] - 2026-11-05
 

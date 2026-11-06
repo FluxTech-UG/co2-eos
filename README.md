@@ -162,8 +162,10 @@ Notes:
   point.
 - `phase_hint` is accepted for API symmetry but unused by the `(ρ, u)` inversion
   (`u` is monotone in `T` at fixed `ρ`, so no phase branch is needed).
-- The old modules `co2_eos.span_wagner` and `co2_eos.inversions` still work; they
-  are the validation ground truth and the benchmark baseline.
+- `co2_eos.span_wagner` is the Span-Wagner surface, the validation ground truth and
+  the benchmark baseline. The submodules' generic names (`co2_eos.inversions`,
+  `transport`, `saturation`, `core`) are the default backend, nist2026, like the
+  public API; their Span-Wagner instance is `<submodule>.for_eos("span_wagner")`.
 
 ## Valid range
 
@@ -203,7 +205,7 @@ regenerating the saturation table from scratch via
 
 ## Validation
 
-CO2-EOS is validated against CoolProp across the full valid range. The test suite covers:
+The Span-Wagner backend (`eos="span_wagner"`) is validated against CoolProp, whose CO₂ is Span-Wagner, across the full valid range. The test suite covers:
 
 - Single-phase properties on a dense (T, ρ) grid spanning gas, liquid, and supercritical regions
 - Saturation curve properties from triple point to near-critical

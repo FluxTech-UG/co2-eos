@@ -26,8 +26,12 @@ jax.config.update("jax_enable_x64", True)
 
 from co2_eos import span_wagner as sw
 from co2_eos import helmholtz as hz
-from co2_eos import saturation as sat
-from co2_eos import core
+from co2_eos import saturation as _sat_mod
+from co2_eos import core as _core_mod
+
+# The Span-Wagner study.
+sat = _sat_mod.for_eos("span_wagner")
+core = _core_mod.for_eos("span_wagner")
 
 RHO_LO, RHO_HI, NRHO = 60.0, 1050.0, 256
 T_LO, T_HI = 255.0, 345.0

@@ -112,8 +112,7 @@ from co2_eos import core as _core
 _jit = partial(jax.jit, static_argnames=("eos",))
 
 # ── Saturation curve: the submodule's lookups at the package default ────────
-# ``saturation``'s own names default to the Span-Wagner instance, like every
-# submodule's; these take ``DEFAULT_EOS``.
+# ``saturation``'s own names and these both default to ``DEFAULT_EOS``.
 
 def saturation_pressure(T, eos=DEFAULT_EOS):
     """Saturation pressure P_sat [Pa] at temperature T [K]."""

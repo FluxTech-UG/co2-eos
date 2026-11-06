@@ -537,17 +537,17 @@ def for_eos(eos):
 # Every backend is built at import, outside any trace.
 for _eos in _backends.EOS_NAMES:
     for_eos(_eos)
-_SW = for_eos(_backends.SPAN_WAGNER)
-_HAVE_CHI_CHEB = _SW._HAVE_CHI_CHEB
-_dpdrho_ref_reduced = _SW._dpdrho_ref_reduced
-_correlation_length_and_excess = _SW._correlation_length_and_excess
-_lambda_critical_formula = _SW._lambda_critical_formula
-_lambda_critical_shared = _SW._lambda_critical_shared
-_thermal_conductivity_shared = _SW._thermal_conductivity_shared
-_scalar_thermal_conductivity = _SW._scalar_thermal_conductivity
-_bulk_viscosity_parts = _SW._bulk_viscosity_parts
-_bulk_viscosity_shared = _SW._bulk_viscosity_shared
-_scalar_bulk_viscosity = _SW._scalar_bulk_viscosity
+_DEFAULT = for_eos(_backends.DEFAULT_EOS)
+_HAVE_CHI_CHEB = _DEFAULT._HAVE_CHI_CHEB
+_dpdrho_ref_reduced = _DEFAULT._dpdrho_ref_reduced
+_correlation_length_and_excess = _DEFAULT._correlation_length_and_excess
+_lambda_critical_formula = _DEFAULT._lambda_critical_formula
+_lambda_critical_shared = _DEFAULT._lambda_critical_shared
+_thermal_conductivity_shared = _DEFAULT._thermal_conductivity_shared
+_scalar_thermal_conductivity = _DEFAULT._scalar_thermal_conductivity
+_bulk_viscosity_parts = _DEFAULT._bulk_viscosity_parts
+_bulk_viscosity_shared = _DEFAULT._bulk_viscosity_shared
+_scalar_bulk_viscosity = _DEFAULT._scalar_bulk_viscosity
 
 
 # ═══════════════════════════════════════════════════════════════════════════

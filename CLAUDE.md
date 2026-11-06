@@ -30,13 +30,17 @@ current symbol-level inventory. The shape:
   that walks the CO₂ backends reads `CO2_EOS_NAMES`.
   `backends.py` is the registry; `core`, `inversions`, `saturation` and the
   EOS-coupled half of `transport` are built once per backend by a factory over the same
-  code, and every submodule's module-level names (`inversions.state_from_Ph`,
-  `transport.thermal_conductivity`, `saturation.saturation_pressure`, ...) are the
-  Span-Wagner instance, so a caller importing from the submodules lands on one backend; the
-  package's public names in `__init__.py` default to `DEFAULT_EOS`. Each backend carries its own R, M, ρ_c and tables
-  (`<stem>_nist2026.npz`, from the scripts' `--eos`). `eos="span_wagner"` is bit for bit
-  0.5.0 (`tests/test_span_wagner_bit_for_bit.py`, live against a `git archive` of 0.5.0);
-  keep it so until a release says otherwise. `tests/test_default_eos.py` holds the default.
+  code. Every generic name follows `DEFAULT_EOS`: the package's public names in
+  `__init__.py` and every submodule's module-level names (`core._thermo`,
+  `inversions.state_from_Ph`, `transport.thermal_conductivity`,
+  `saturation.saturation_pressure`, ...) are the nist2026 instance. Span-Wagner is reached
+  by its own name only: `eos="span_wagner"`, a submodule's `for_eos("span_wagner")`, the
+  `span_wagner` module and its analytic kernel `helmholtz`. Each backend carries its own R,
+  M, ρ_c and tables (`<stem>_nist2026.npz`, from the scripts' `--eos`). `eos="span_wagner"`
+  is bit for bit 0.5.0 (`tests/test_span_wagner_bit_for_bit.py`, live against a `git
+  archive` of 0.5.0); keep it so until a release says otherwise. `tests/test_default_eos.py`
+  holds the default on every public and submodule name. Tests that validate Span-Wagner
+  reach it through `tests/span_wagner_api.py`; a bench names the backend it runs.
 - `tests/`: the validation suite; it is the package's contract (see Critical rules).
 - `bench/`: profiling and validation studies; `scripts/`: table generation;
   `examples/`: the launch demo.

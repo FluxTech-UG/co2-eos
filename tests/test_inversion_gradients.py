@@ -15,16 +15,14 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from co2_eos.inversions import (
-    _density_from_PT,
-    _state_from_Ph,
-    _temperature_from_Du,
-    _state_from_Du,
-    SUPERCRITICAL,
-    LIQUID,
-    VAPOR,
-)
 from co2_eos import span_wagner as sw
+from tests.span_wagner_api import inversions   # the Span-Wagner instance
+
+_density_from_PT = inversions._density_from_PT
+_state_from_Ph = inversions._state_from_Ph
+_temperature_from_Du = inversions._temperature_from_Du
+_state_from_Du = inversions._state_from_Du
+SUPERCRITICAL, LIQUID, VAPOR = inversions.SUPERCRITICAL, inversions.LIQUID, inversions.VAPOR
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────

@@ -1,7 +1,9 @@
 """Validate the redesigned core: round-trip, properties, seed/iteration count."""
 import jax, jax.numpy as jnp, numpy as np
 jax.config.update("jax_enable_x64", True)
-from co2_eos import core, span_wagner as sw
+from co2_eos import core as _core_mod, span_wagner as sw
+
+core = _core_mod.for_eos("span_wagner")   # the Span-Wagner study
 from co2_eos.span_wagner import TC, RHOC, R, T_TRIPLE
 
 def pts(Tlo, Thi, rlo, rhi, n, seed):

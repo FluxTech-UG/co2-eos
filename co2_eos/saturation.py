@@ -4,11 +4,10 @@ Loads a precomputed saturation table (cubic spline coefficients) generated
 by scripts/generate_saturation_table.py by a Maxwell construction on the
 selected backend's surface: ``saturation_table.npz`` for Span-Wagner,
 ``saturation_table_nist2026.npz`` for ``eos="nist2026"``.  Every lookup takes
-the static keyword ``eos``.  Like the other submodules' module-level names
-(``inversions``, ``transport``, ``span_wagner``), the lookups here default to
-the Span-Wagner instance, so a caller that imports from the submodules lands on
-one backend; the package's public re-exports (``co2_eos.saturation_pressure``
-and the rest) default to the package default.
+the static keyword ``eos`` with the default ``DEFAULT_EOS`` (nist2026), like
+the other submodules' module-level names (``core``, ``inversions``,
+``transport``) and the package's public names; Span-Wagner is named,
+``eos="span_wagner"``.
 
 All lookup functions use cubic spline interpolation and are fully
 differentiable and JIT-compilable. They accept scalar or array inputs.
@@ -28,7 +27,7 @@ from types import SimpleNamespace
 jax.config.update("jax_enable_x64", True)
 
 from co2_eos import backends as _backends
-from co2_eos.backends import SPAN_WAGNER
+from co2_eos.backends import DEFAULT_EOS
 
 # ── Table loading (lazy, once) ───────────────────────────────────────────
 # Table is loaded outside JIT tracing to avoid tracer leaks.
@@ -37,7 +36,7 @@ from co2_eos.backends import SPAN_WAGNER
 _TABLES = {}
 
 
-def _ensure_loaded(eos=SPAN_WAGNER):
+def _ensure_loaded(eos=DEFAULT_EOS):
     """Load the backend's saturation table on first use. Call outside JIT."""
     if eos in _TABLES:
         return
@@ -80,7 +79,7 @@ def _eval_spline(x, breaks, coeffs):
 
 # ── T-based lookups ─────────────────────────────────────────────────────
 
-def saturation_pressure(T, eos=SPAN_WAGNER):
+def saturation_pressure(T, eos=DEFAULT_EOS):
     """Saturation pressure P_sat [Pa] at temperature T [K].
 
     Valid for T in [216.592, 304.127] K (triple point to near-critical).
@@ -90,7 +89,7 @@ def saturation_pressure(T, eos=SPAN_WAGNER):
     return _eval_spline(T, tab['T_breaks'], tab['P_sat_c'])
 
 
-def saturation_densities(T, eos=SPAN_WAGNER):
+def saturation_densities(T, eos=DEFAULT_EOS):
     """Saturated liquid and vapor densities [kg/m3] at temperature T [K].
 
     Returns:
@@ -102,7 +101,7 @@ def saturation_densities(T, eos=SPAN_WAGNER):
     return rho_l, rho_v
 
 
-def saturation_enthalpies_T(T, eos=SPAN_WAGNER):
+def saturation_enthalpies_T(T, eos=DEFAULT_EOS):
     """Saturated liquid and vapor enthalpies [J/kg] at temperature T [K].
 
     Returns:
@@ -114,7 +113,7 @@ def saturation_enthalpies_T(T, eos=SPAN_WAGNER):
     return h_l, h_v
 
 
-def saturation_entropies(T, eos=SPAN_WAGNER):
+def saturation_entropies(T, eos=DEFAULT_EOS):
     """Saturated liquid and vapor entropies [J/(kg*K)] at temperature T [K].
 
     Returns:
@@ -128,7 +127,7 @@ def saturation_entropies(T, eos=SPAN_WAGNER):
 
 # ── P-based lookups ─────────────────────────────────────────────────────
 
-def saturation_temperature(P, eos=SPAN_WAGNER):
+def saturation_temperature(P, eos=DEFAULT_EOS):
     """Saturation temperature T_sat [K] at pressure P [Pa].
 
     Valid for P in [P_triple, P_near_crit].
@@ -137,7 +136,7 @@ def saturation_temperature(P, eos=SPAN_WAGNER):
     return _eval_spline(P, tab['P_breaks'], tab['T_sat_c'])
 
 
-def saturation_enthalpies(P, eos=SPAN_WAGNER):
+def saturation_enthalpies(P, eos=DEFAULT_EOS):
     """Saturated liquid and vapor enthalpies [J/kg] at pressure P [Pa].
 
     Returns:
@@ -149,7 +148,7 @@ def saturation_enthalpies(P, eos=SPAN_WAGNER):
     return h_l, h_v
 
 
-def saturation_densities_P(P, eos=SPAN_WAGNER):
+def saturation_densities_P(P, eos=DEFAULT_EOS):
     """Saturated liquid and vapor densities [kg/m3] at pressure P [Pa].
 
     Returns:
@@ -161,7 +160,7 @@ def saturation_densities_P(P, eos=SPAN_WAGNER):
     return rho_l, rho_v
 
 
-def saturation_entropies_P(P, eos=SPAN_WAGNER):
+def saturation_entropies_P(P, eos=DEFAULT_EOS):
     """Saturated liquid and vapor entropies [J/(kg*K)] at pressure P [Pa].
 
     Returns:

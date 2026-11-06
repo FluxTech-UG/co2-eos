@@ -113,10 +113,17 @@ put("grad/state_from_Ph/temperature", jax.vmap(jax.grad(
     lambda p, h: ce.state_from_Ph(p, h)["temperature"], argnums=(0, 1)))(PH, HH))
 put("grad/saturation_pressure", jax.vmap(jax.grad(ce.saturation_pressure))(TS))
 
-# The submodules' module-level names (core's hot path among them) are the
-# Span-Wagner instance: called with
-# no ``eos`` on both sides, as a consumer importing from them calls them.
+# The submodules' kernels: 0.5.0's module-level names (its only backend), and
+# here each submodule's ``for_eos(<name>)`` instance, the same names bound to
+# the backend.  The transport entry points are jit(vmap(scalar)), as 0.5.0's.
 from co2_eos import core as _core, inversions as _inv, saturation as _sat, transport as _tr
+if _EOS is not None:
+    _core, _inv, _sat = (m.for_eos(_EOS) for m in (_core, _inv, _sat))
+    _trk = _tr.for_eos(_EOS)
+    _tr = _Api()
+    for _name in ("viscosity", "thermal_conductivity", "bulk_viscosity"):
+        setattr(_tr, _name,
+                jax.jit(jax.vmap(getattr(_trk, f"_scalar_{_name}"))))
 
 for name in ("saturation_pressure", "saturation_densities",
              "saturation_entropies"):

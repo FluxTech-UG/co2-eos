@@ -19,9 +19,9 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tests.span_wagner_api import co2   # the Span-Wagner path, eos bound
-from co2_eos import transport as tr
-from co2_eos.core import _thermo
+from tests.span_wagner_api import co2, core, transport as tr   # Span-Wagner, eos bound
+
+_thermo = core._thermo
 
 # (P [Pa], T [K], τ₁₁ [ns], ζ_vib [Pa·s], ζ_crit [Pa·s]); ζ_crit None where
 # the table prints fewer than two significant figures.

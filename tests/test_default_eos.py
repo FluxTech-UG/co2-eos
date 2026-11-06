@@ -26,6 +26,29 @@ def test_every_public_function_defaults_to_nist2026():
         assert params["eos"].default == ce.NIST2026, name
 
 
+def test_submodule_names_are_the_nist2026_instance():
+    """Every generic module-level name of a submodule is its nist2026 form.
+
+    ``core``, ``inversions`` and ``transport`` bind each kernel of their
+    ``for_eos(NIST2026)`` namespace at module level (the same object, so the
+    same compiled code); ``saturation``'s lookups take ``eos`` with the
+    nist2026 default.  Span-Wagner is reached by its own name only:
+    ``span_wagner``, or ``for_eos("span_wagner")``.
+    """
+    from co2_eos import core, inversions, saturation, transport
+    for mod in (core, inversions, transport):
+        ns = mod.for_eos(ce.NIST2026)
+        for name, value in vars(ns).items():
+            if name == "eos":
+                continue
+            assert getattr(mod, name) is value, f"{mod.__name__}.{name}"
+    for name in saturation._LOOKUPS:
+        params = inspect.signature(getattr(saturation, name)).parameters
+        assert params["eos"].default == ce.NIST2026, f"saturation.{name}"
+    assert (inspect.signature(saturation._ensure_loaded).parameters["eos"]
+            .default == ce.NIST2026)
+
+
 def test_default_call_equals_named_nist2026_call():
     T = jnp.asarray([250.0, 304.2, 310.0, 400.0])
     rho = jnp.asarray([20.0, 468.0, 600.0, 150.0])

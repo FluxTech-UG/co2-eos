@@ -63,9 +63,9 @@ def _build(eos):
 
     The body is the same code for every backend; only the constants, the
     analytic kernel ``hz``, the seed table and the transport's EOS-coupled
-    half are the backend's.  The Span-Wagner instance is the module's own
-    names below, so 0.5.0 callers (``core._thermo`` and the rest) are served
-    by it unchanged.
+    half are the backend's.  The ``DEFAULT_EOS`` instance (nist2026) is the
+    module's own names below (``core._thermo`` and the rest); Span-Wagner's
+    is ``for_eos("span_wagner")``.
     """
     _b = _backends.get(eos)
     TC, RHOC, R = _b.surface.TC, _b.surface.RHOC, _b.surface.R
@@ -348,13 +348,13 @@ def for_eos(eos):
 # Every backend is built at import, outside any trace.
 for _eos in _backends.EOS_NAMES:
     for_eos(_eos)
-_SW = for_eos(_backends.SPAN_WAGNER)
-_HAVE_SEED = _SW._HAVE_SEED
-_T_MIN = _SW._T_MIN
-_seed_T = _SW._seed_T
-_thermo = _SW._thermo
-_u_and_cv = _SW._u_and_cv
-_solve_T = _SW._solve_T
-_temperature_from_Du = _SW._temperature_from_Du
-_state_from_T_rho = _SW._state_from_T_rho
-_state_from_rho_u = _SW._state_from_rho_u
+_DEFAULT = for_eos(_backends.DEFAULT_EOS)
+_HAVE_SEED = _DEFAULT._HAVE_SEED
+_T_MIN = _DEFAULT._T_MIN
+_seed_T = _DEFAULT._seed_T
+_thermo = _DEFAULT._thermo
+_u_and_cv = _DEFAULT._u_and_cv
+_solve_T = _DEFAULT._solve_T
+_temperature_from_Du = _DEFAULT._temperature_from_Du
+_state_from_T_rho = _DEFAULT._state_from_T_rho
+_state_from_rho_u = _DEFAULT._state_from_rho_u

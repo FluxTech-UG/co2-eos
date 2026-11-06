@@ -18,8 +18,18 @@ import argparse, json, time
 import jax, jax.numpy as jnp, numpy as np
 jax.config.update("jax_enable_x64", True)
 
-from co2_eos import core, span_wagner as sw, transport as tr
-from co2_eos import inversions as inv
+from types import SimpleNamespace
+
+from co2_eos import core as _core_mod, span_wagner as sw, transport as _tr_mod
+from co2_eos import inversions as _inv_mod
+
+# Every call is on the Span-Wagner backend.
+core = _core_mod.for_eos("span_wagner")
+inv = _inv_mod.for_eos("span_wagner")
+_tr_sw = _tr_mod.for_eos("span_wagner")
+tr = SimpleNamespace(
+    viscosity=jax.jit(jax.vmap(_tr_sw._scalar_viscosity)),
+    thermal_conductivity=jax.jit(jax.vmap(_tr_sw._scalar_thermal_conductivity)))
 
 NS = [64, 256, 1024, 4096]
 SUPER = 2

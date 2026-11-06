@@ -33,11 +33,12 @@ jax.config.update("jax_enable_x64", True)
 
 import co2_eos
 from co2_eos import span_wagner as sw
-from co2_eos import saturation as sat
+from co2_eos import saturation as _sat_mod
 
 # The fast path under test is the Span-Wagner backend, the reference chain's
-# own equation of state.
+# own equation of state; the dome filter reads its saturation curve.
 _EOS = co2_eos.SPAN_WAGNER
+sat = _sat_mod.for_eos(_EOS)
 
 # ═════════════════════════════════════════════════════════════════════════
 # Independent reference chain (span_wagner autodiff + literal correlations)
