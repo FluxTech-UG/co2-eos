@@ -56,7 +56,7 @@ in use (an error, a crash, a missing file) gets no test. One guard sits beside t
 `tests/test_public_text.py` holds the public text free of the private working setup's
 names, because a published leak cannot be taken back.
 
-- **`make test`**: the suite on 8 xdist workers (`--dist loadfile`), about 20 s on the
+- **`make test`**: the suite on 8 xdist workers (`--dist loadfile`), about 26 s on the
   laptop. Needs only the `[test]` extra.
 - **`make gate`**: the commit gate, run as `gate <repo path>`: the same run as `make test`.
   `gate` fails a run longer than `GATE_BUDGET_S`, which lives in the `Makefile`.
@@ -85,8 +85,13 @@ control flow for anything that depends on a traced value, so `jit`, `vmap`, `gra
 `custom_jvp` keep working end-to-end.
 
 **Accuracy is validated against outside references.** The test suite is the acceptance
-bar; a change is done when it is green. nist2026 meets the values NIST IR 8608 prints;
-Span-Wagner meets CoolProp (`tests/test_accuracy_vs_coolprop.py`); the reference gases
-meet the stored CoolProp values of `tests/data/reference_gas_values.csv` (c_p and c_v
-0.2 %, speed of sound 0.1 %) and the transport check values Lemmon and Jacobsen (2004)
-print (`tests/test_reference_gases.py`).
+bar; a change is done when it is green. nist2026 meets the values NIST IR 8608 prints
+and CoolProp's Span-Wagner within twice the stated uncertainty
+(`tests/test_nist2026_vs_coolprop.py`); Span-Wagner meets CoolProp
+(`tests/test_accuracy_vs_coolprop.py`); both saturation tables meet a Maxwell solve on
+their surface up to T_c (`tests/test_saturation.py`); the inversions' and the fast path's
+gradients meet finite differences and the implicit-function oracle
+(`tests/test_inversion_gradients.py`, `tests/test_fastpath_validation.py`); the reference
+gases meet the stored CoolProp values of `tests/data/reference_gas_values.csv`, the
+transport check values Lemmon and Jacobsen (2004) print and, for helium, its ab initio
+table (`tests/test_reference_gases.py`, whose docstring holds the bars and their sources).
