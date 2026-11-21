@@ -5,8 +5,8 @@ Measured 2026-07-03 on Apple M2 Pro (CPU), float64, JAX 0.10.0, co2-eos 0.2.0
 uniformly over the consumers' operating box **T ∈ [290, 350] K, ρ ∈ [60, 700]
 kg/m³**, `u` derived from Span-Wagner so (ρ, u) is exactly consistent.
 
-Consumer context: 1DSim3 measures this call at **379 µs/eval at N=64** (83.5 %
-of its RHS). Standalone here it is **325 µs at N=64**, consistent; the
+Consumer context: a downstream 1D flow simulation measures this call at
+**379 µs/eval at N=64** (83.5 % of its RHS). Standalone here it is **325 µs at N=64**, consistent; the
 remainder is consumer-side glue. All timings are medians, `block_until_ready`.
 
 ## Component timings

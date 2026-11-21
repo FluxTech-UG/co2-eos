@@ -11,7 +11,7 @@ crudely, independent of the seed table.
 Checks over the consumers' operating envelope (T ∈ [290, 350] K,
 ρ ∈ [60, 700] kg/m³, single-phase only; dome states are documented
 unstable-branch extrapolation), dense-sampled including a near-critical ring
-and the 1DSim3 spec point (6.736 MPa / 316.65 K):
+and one state above the critical temperature (6.736 MPa / 316.65 K):
 
   1. every property returned by ``properties_from_rho_u`` vs reference
      (max + p99 relative error);
@@ -188,7 +188,7 @@ def reference_derivs(rho, u, qname):
 
 
 # ═════════════════════════════════════════════════════════════════════════
-# Envelope sampling (single-phase, incl. near-critical ring + spec point)
+# Envelope sampling (single-phase, incl. near-critical ring + one state above T_c)
 # ═════════════════════════════════════════════════════════════════════════
 
 def envelope_single_phase(n, seed=17):
@@ -198,13 +198,13 @@ def envelope_single_phase(n, seed=17):
         rng.uniform(290.0, 350.0, n - 2 * n_ring),
         rng.uniform(304.2, 310.0, n_ring),           # near-critical corridor
         304.1282 + rng.uniform(0.02, 1.0, n_ring),   # tight approach, T > Tc
-        [316.65],                                     # spec point T
+        [316.65],                                     # the state above T_c: T
     ])
     rho = np.concatenate([
         rng.uniform(60.0, 700.0, n - 2 * n_ring),
         rng.uniform(380.0, 560.0, n_ring),
         467.6 + rng.uniform(-30.0, 30.0, n_ring),
-        [co2_eos.density_from_PT(6.736e6, 316.65, eos=_EOS)],  # spec point rho
+        [co2_eos.density_from_PT(6.736e6, 316.65, eos=_EOS)],  # the state above T_c: rho
     ])
     rl, rv = sat.saturation_densities(jnp.asarray(np.clip(T, 220.0, 304.0)))
     dome = (T < sw.TC) & (rho > np.asarray(rv)) & (rho < np.asarray(rl))

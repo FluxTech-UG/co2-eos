@@ -65,7 +65,7 @@ def test_derivatives_vs_ift_oracle(envelope):
     T = np.asarray(T)
     corridor = np.where((T > 304.2) & (T < 310.0))[0]
     tight = np.where(T < 305.2)[0]
-    # The bulk, the near-critical corridor, the tight approach to T_c, the spec point.
+    # The bulk, the near-critical corridor, the tight approach to T_c, the state above T_c.
     idx = np.r_[0:4, corridor[-4:], tight[-4:], len(T) - 1]
     rho_d, u_d = rho[idx], u[idx]
     quantities = ("temperature", "thermal_conductivity")

@@ -23,7 +23,8 @@ floor is round-off, not FD noise.
 35,160 single-phase samples: uniform over T ∈ [290, 350] K,
 ρ ∈ [60, 700] kg/m³, plus a near-critical corridor (T ∈ [304.2, 310] K,
 ρ ∈ [380, 560] kg/m³), a tight critical approach (T ∈ Tc + [0.02, 1] K,
-ρ ∈ ρc ± 30 kg/m³) and the 1DSim3 spec point (6.736 MPa / 316.65 K).
+ρ ∈ ρc ± 30 kg/m³) and one state above the critical
+temperature (6.736 MPa / 316.65 K).
 Two-phase-dome (ρ, u) states are excluded: there the single-phase inversion
 is documented unstable-branch extrapolation (unchanged behaviour).
 

@@ -143,8 +143,8 @@ The inversion alone reaches **63.7×** vs the v0.1 autodiff path at N = 2²⁰
 
 Validated against an independent oracle chain (Span-Wagner autodiff +
 literal-formula transport + to-convergence Newton) over 35k single-phase
-envelope samples including the near-critical approach and the 1DSim3 spec
-point (`docs/validation-fastpath-2026-07.md`):
+envelope samples including the near-critical approach and one state above
+the critical temperature, 6.736 MPa / 316.65 K (`docs/validation-fastpath-2026-07.md`):
 
 - every property ≤ 1.3e-10 max rel (typical ≤ 1e-12; the max is round-off
   amplification at the near-critical cp divergence);
