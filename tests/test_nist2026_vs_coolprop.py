@@ -17,18 +17,17 @@ is compared.
 Where it stops holding: near the critical point neither source states an
 uncertainty (Span and Wagner, Figs. 38 to 40, region G: "difficult to
 estimate"), and there the two equations do differ (NIST IR 8608 Sec. 5:
-Span-Wagner's nonanalytic terms make its derivatives oscillate), so the box
-|T − T_c| ≤ 5 K, |ρ − ρ_c| ≤ 20 % ρ_c is left out, as are states within 0.2 % of
-the saturation pressure (a branch choice, not a property).
+Span-Wagner's nonanalytic terms make its derivatives oscillate), so the grid
+holds no state in the box |T − T_c| ≤ 5 K, |ρ − ρ_c| ≤ 20 % ρ_c and none within
+0.2 % of the saturation pressure (a branch choice, not a property); the test
+asserts both of its own grid.
 """
 import jax
 import jax.numpy as jnp
+import CoolProp.CoolProp as CP
 import numpy as np
-import pytest
 
 jax.config.update("jax_enable_x64", True)
-
-CP = pytest.importorskip("CoolProp.CoolProp")
 
 import co2_eos as ce
 
@@ -49,12 +48,13 @@ def test_against_coolprop_in_the_stated_region():
           ce.properties_from_rho_T(rho, jnp.asarray(TT), eos=E).items()}
     psat = np.asarray(ce.saturation_pressure(jnp.asarray(np.minimum(TT, TC - 0.01)), eos=E))
     rho = np.asarray(rho)
-    keep = (((np.abs(TT - TC) > 5.0) | (np.abs(rho / RHOC - 1.0) > 0.2))
-            & ((TT >= TC) | (np.abs(PP / psat - 1.0) > 2e-3)))
-    assert np.all(np.isfinite(rho[keep])) and keep.sum() > 180, int(keep.sum())
+    assert np.all(np.isfinite(rho))
+    near_critical = (np.abs(TT - TC) <= 5.0) & (np.abs(rho / RHOC - 1.0) <= 0.2)
+    near_saturation = (TT < TC) & (np.abs(PP / psat - 1.0) <= 2e-3)
+    assert not near_critical.any() and not near_saturation.any()
     for key, (cp_key, band) in BANDS.items():
         ref = np.array([CP.PropsSI(cp_key, "T", t, "P", p, "CO2")
-                        for t, p in zip(TT[keep], PP[keep])])
-        dev = np.abs(st[key][keep] / ref - 1.0)
+                        for t, p in zip(TT, PP)])
+        dev = np.abs(st[key] / ref - 1.0)
         i = int(dev.argmax())
-        assert dev[i] < band, (key, dev[i], TT[keep][i], PP[keep][i])
+        assert dev[i] < band, (key, dev[i], TT[i], PP[i])

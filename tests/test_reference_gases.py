@@ -19,7 +19,7 @@ code, less sturdy than a conservation law:
   and Mehl 2007, Table 5, pp. 87-88; their Eq. 37, p. 90, puts the expanded
   uncertainty (k = 2) of η and λ at 0.0002 + 0.005 K/T, about 0.02 % from 200 to
   1000 K).  The table is printed to six digits (a half unit of the last one is
-  1e-6 to 3.3e-6 relative), so the fit is held to 5e-6, far inside the 0.02 %;
+  1.1e-6 to 4.2e-6 relative), so the fit is held to 5e-6, far inside the 0.02 %;
   the table, not the fit, carries the physics.
 """
 

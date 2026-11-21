@@ -603,16 +603,15 @@ _co2_eos with ``eos="span_wagner"`` bound: the public API and the submodules._
 
 ### tests/test_accuracy_vs_coolprop.py
 _Headline accuracy test against CoolProp._
-- const CP  ·L32
-- const _CP_KEYS  ·L38
-- const _DEFAULT_RTOL  ·L53
-- const _RTOL_OVERRIDES  ·L55
-- _supercritical_grid()  ·L78
-- _subcritical_liquid_grid()  ·L84
-- _subcritical_vapor_grid()  ·L93
-- const REGIONS  ·L102
-- @pytest.fixture region_data(request)  ·L112: Compute co2_eos and CoolProp values once per region.
-- @pytest.mark.parametrize test_matches_coolprop(region_data, quantity)  ·L135: Per (region, quantity), every grid point agrees with CoolProp to rtol.
+- const _CP_KEYS  ·L37
+- const _DEFAULT_RTOL  ·L52
+- const _RTOL_OVERRIDES  ·L54
+- _supercritical_grid()  ·L77
+- _subcritical_liquid_grid()  ·L83
+- _subcritical_vapor_grid()  ·L92
+- const REGIONS  ·L101
+- @pytest.fixture region_data(request)  ·L111: Compute co2_eos and CoolProp values once per region.
+- @pytest.mark.parametrize test_matches_coolprop(region_data, quantity)  ·L134: Per (region, quantity), every grid point agrees with CoolProp to rtol.
 
 ### tests/test_bulk_viscosity.py
 _Bulk viscosity ζ = ζ_vib + ζ_crit: the dilute limit against Cramer (2012)._
@@ -663,12 +662,11 @@ _nist2026 reproduces the values NIST IR 8608 computes from its equation._
 
 ### tests/test_nist2026_vs_coolprop.py
 _nist2026, the default backend, against CoolProp in Span-Wagner's stated region._
-- const CP  ·L31
-- const E  ·L35
-- const T1  ·L37
-- const P1  ·L40
-- const BANDS  ·L42
-- test_against_coolprop_in_the_stated_region()  ·L45
+- const E  ·L34
+- const T1  ·L36
+- const P1  ·L39
+- const BANDS  ·L41
+- test_against_coolprop_in_the_stated_region()  ·L44
 
 ### tests/test_pressure_derivatives.py
 _The full-state dict satisfies the two exact thermodynamic identities._

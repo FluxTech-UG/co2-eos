@@ -24,12 +24,11 @@ small numerical disagreements would dominate the comparison.
 
 import jax
 import jax.numpy as jnp
+import CoolProp.CoolProp as CP
 import numpy as np
 import pytest
 
 jax.config.update("jax_enable_x64", True)
-
-CP = pytest.importorskip("CoolProp.CoolProp")
 
 from tests.span_wagner_api import co2   # the Span-Wagner path, eos bound
 
