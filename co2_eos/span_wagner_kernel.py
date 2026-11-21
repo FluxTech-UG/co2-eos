@@ -22,7 +22,7 @@ import fails loudly rather than computing a stale factorization.
 
 The result is the same Span-Wagner sum re-associated: agreement with the
 autodiff derivatives of ``span_wagner.alphar`` / ``alpha0`` is round-off level
-(~1e-12; see ``tests/test_analytic_derivs.py``), and every function remains
+(~1e-12), and every function remains
 JIT-compilable, vmappable and differentiable to higher order.
 
 Convention: τ = Tc/T (reduced inverse temperature), δ = ρ/ρc (reduced

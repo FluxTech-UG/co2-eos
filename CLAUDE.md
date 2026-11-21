@@ -58,13 +58,10 @@ names, because a published leak cannot be taken back.
 
 - **`make test`**: the suite on 8 xdist workers (`--dist loadfile`), about 20 s on the
   laptop. Needs only the `[test]` extra.
-- **`make gate`**: the commit gate, run as `gate <repo path>`. It is `make test` with the
-  `pytest_budget` plugin loaded, which fails any test whose setup + call + teardown runs
-  over `TEST_BUDGET_S`. `gate` fails a run longer than `GATE_BUDGET_S`. Both budgets live in
-  the `Makefile`.
+- **`make gate`**: the commit gate, run as `gate <repo path>`: the same run as `make test`.
+  `gate` fails a run longer than `GATE_BUDGET_S`, which lives in the `Makefile`.
 
-CI runs `pytest tests/ -v` without the budget plugin. Only `make gate` loads the plugin, so
-a clone without it runs the plain suite.
+CI runs `pytest tests/ -v`.
 
 ## Critical rules
 

@@ -52,7 +52,7 @@ from co2_eos import transport as _transport
 # so the 0.5.0 results hold bit for bit).  NIST IR 8608 needs 5: its c_v rises
 # more steeply within a few mK of T_c, and 3 steps leave up to 6e-5 K there,
 # 4 steps 6e-9 K, 5 steps 1e-13 K (40k envelope samples plus 4k within 2 K
-# of T_c at 420 to 520 kg/m³; test_nist2026_backend).
+# of T_c at 420 to 520 kg/m³).
 _NEWTON_ITERS_TABLE = {_backends.SPAN_WAGNER: 3, _backends.NIST2026: 5}
 
 

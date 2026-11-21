@@ -545,23 +545,23 @@ _Generate the chi_ref Chebyshev table for the thermal-conductivity_
 
 ### scripts/generate_reference_gas_values.py
 _Write the stored reference values the reference-gas tests compare against._
-- const OUT  ·L29
-- const FLUID  ·L31
-- const BAR  ·L32
-- const GRID_T  ·L33
-- const GRID_P  ·L34
-- const SWIFT_T  ·L35
-- const SWIFT_P  ·L36
-- const HSULAI_T  ·L37
-- const HSULAI_P  ·L38
-- const HIGH_T  ·L39
-- const HIGH_P  ·L40
-- const COLUMNS  ·L42
-- const KEYS  ·L43
-- const M_SCALE  ·L48
-- const POWER  ·L49
-- rows()  ·L53
-- main()  ·L66
+- const OUT  ·L28
+- const FLUID  ·L30
+- const BAR  ·L31
+- const GRID_T  ·L32
+- const GRID_P  ·L33
+- const SWIFT_T  ·L34
+- const SWIFT_P  ·L35
+- const HSULAI_T  ·L36
+- const HSULAI_P  ·L37
+- const HIGH_T  ·L38
+- const HIGH_P  ·L39
+- const COLUMNS  ·L41
+- const KEYS  ·L42
+- const M_SCALE  ·L47
+- const POWER  ·L48
+- rows()  ·L52
+- main()  ·L65
 
 ### scripts/generate_saturation_table.py
 _Generate a CO2 saturation table from one of the package's EOS backends._

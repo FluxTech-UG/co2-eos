@@ -11,7 +11,7 @@ Helium's transport is dilute only: the backend's 1 % bar and its limit stand in
 
     python scripts/fit_helium_transport.py
 
-tests/test_reference_gases.py holds the stored coefficients to this refit.
+The coefficients stored in ``reference_gases_data`` are this refit's output.
 """
 
 import numpy as np

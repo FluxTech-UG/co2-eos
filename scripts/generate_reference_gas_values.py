@@ -6,8 +6,7 @@ CoolProp's air is Lemmon et al. (2000), its argon Tegeler et al. (1999), its
 helium Ortiz Vega et al.; its transport for air and argon is Lemmon and
 Jacobsen (2004).  Its helium transport is Arp et al. (viscosity) and Hands and
 Arp (conductivity), both older than the ab initio fit the helium backend uses,
-so the helium transport columns carry that fit's disagreement with them
-(tests/test_reference_gases.py states the bars).
+so the helium transport columns carry that fit's disagreement with them.
 
     python scripts/generate_reference_gas_values.py
 
