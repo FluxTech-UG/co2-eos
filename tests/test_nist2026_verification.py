@@ -12,6 +12,8 @@ each to the digits printed (half a unit in the last printed digit):
 The saturation states are solved here by a Maxwell construction (equal p and
 g) on the equation itself, so no table's spline error enters.
 """
+import functools
+
 import jax
 import jax.numpy as jnp
 
@@ -21,19 +23,26 @@ from co2_eos import nist2026 as nb
 from co2_eos import nist2026_data as nd
 
 
-def _maxwell(T, rho_l0, rho_v0, iters=40):
-    """Coexisting (ρ_l, ρ_v) at T: Newton on (ln ρ_l, ln ρ_v)."""
-    def F(x):
+@functools.lru_cache(maxsize=None)
+def _maxwell_newton(surf):
+    """(F, one Newton step) of the equal-p, equal-g system on ``surf``, jitted."""
+    def F(x, T):
         rl, rv = jnp.exp(x[0]), jnp.exp(x[1])
         return jnp.array([
-            (nb._scalar_pressure(T, rl) - nb._scalar_pressure(T, rv)) / nb.PC,
-            (nb._scalar_gibbs_energy(T, rl) - nb._scalar_gibbs_energy(T, rv))
-            / (nb.R * T)])
+            (surf._scalar_pressure(T, rl) - surf._scalar_pressure(T, rv)) / surf.PC,
+            (surf._scalar_gibbs_energy(T, rl) - surf._scalar_gibbs_energy(T, rv))
+            / (surf.R * T)])
     J = jax.jacfwd(F)
+    return jax.jit(F), jax.jit(lambda x, T: x - jnp.linalg.solve(J(x, T), F(x, T)))
+
+
+def _maxwell(T, rho_l0, rho_v0, surf=nb, iters=40):
+    """Coexisting (ρ_l, ρ_v) at T on ``surf``: Newton on (ln ρ_l, ln ρ_v)."""
+    F, step = _maxwell_newton(surf)
     x = jnp.log(jnp.array([rho_l0, rho_v0]))
     for _ in range(iters):
-        x = x - jnp.linalg.solve(J(x), F(x))
-    assert float(jnp.max(jnp.abs(F(x)))) < 1e-13
+        x = step(x, T)
+    assert float(jnp.max(jnp.abs(F(x, T)))) < 1e-13
     return float(jnp.exp(x[0])), float(jnp.exp(x[1]))
 
 

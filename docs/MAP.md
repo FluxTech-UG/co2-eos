@@ -622,23 +622,27 @@ _Bulk viscosity ζ = ζ_vib + ζ_crit: the dilute limit against Cramer (2012)._
 
 ### tests/test_fastpath_validation.py
 _The economized (ρ, u) fast path must match the independent oracle chain._
-- const _REPO  ·L20
-- @pytest.fixture envelope()  ·L28
-- test_properties_vs_oracle(envelope)  ·L33: Every property ≤ 5e-10 rel vs the independent chain (measured ~1e-10).
+- const _REPO  ·L21
+- @pytest.fixture envelope()  ·L29
+- test_properties_vs_oracle(envelope)  ·L34: Every property ≤ 5e-10 rel vs the independent chain (measured ~1e-10).
+- test_derivatives_vs_ift_oracle(envelope)  ·L44: d(q)/d(ρ, u) by jax.grad ≤ 1e-9 against the implicit-function oracle.
 
 ### tests/test_inversion_gradients.py
-_Reverse-mode gradients (jax.grad, through the custom_jvp rule) of_
-- finite_diff(f, x, idx, rel_eps=1e-07)  ·L22: Central finite difference of f with respect to x[idx].
-- assert_close(a, b, rtol=0.0001, atol=1e-08, name='')  ·L41: Assert two values are close, with helpful error message.
-- const T_SC  ·L56
-- const P_SC  ·L57
-- const HINT_SC  ·L58
-- const T_LIQ  ·L61
-- const P_LIQ  ·L62
-- const HINT_LIQ  ·L63
-- class TestStateFromDu  ·L70: Forward and reverse AD through state_from_Du.
-  - @pytest.fixture test_point(self, request)  ·L77
-  - test_vjp_matches_fd(self, test_point)  ·L84
+_Gradients through the inversions' custom_jvp rules match central finite differences._
+- finite_diff(f, x, idx, rel_eps=1e-07)  ·L32: Central finite difference of f with respect to x[idx].
+- assert_close(a, b, rtol=0.0001, atol=1e-08, name='')  ·L51: Assert two values are close, with helpful error message.
+- const T_SC  ·L66
+- const P_SC  ·L67
+- const HINT_SC  ·L68
+- const T_LIQ  ·L71
+- const P_LIQ  ·L72
+- const HINT_LIQ  ·L73
+- class TestStateFromDu  ·L80: Forward and reverse AD through state_from_Du.
+  - @pytest.fixture test_point(self, request)  ·L87
+  - test_vjp_matches_fd(self, test_point)  ·L94
+- const PRESSURE_PATH_STATES  ·L120
+- _fd_columns(f, x, y, rel_eps=1e-07)  ·L128: Central differences of the batched f(x, y) in x and in y, a relative step each.
+- test_pressure_paths_match_fd()  ·L136: jax.grad of density_from_PT and state_from_Ph (T and ρ) against central differences.
 
 ### tests/test_nist2026_derivs.py
 _The nist2026 analytic Helmholtz derivatives must match jax.grad._
@@ -648,18 +652,23 @@ _The nist2026 analytic Helmholtz derivatives must match jax.grad._
 - test_residual_derivs_match_autodiff()  ·L55
 - test_ideal_derivs_match_autodiff()  ·L65
 
-### tests/test_nist2026_saturation.py
-_The shipped nist2026 saturation table holds phase equilibrium._
-- const E  ·L16
-- @pytest.mark.parametrize test_table_round_trip_against_maxwell(T)  ·L20
-
 ### tests/test_nist2026_verification.py
 _nist2026 reproduces the values NIST IR 8608 computes from its equation._
-- _maxwell(T, rho_l0, rho_v0, iters=40)  ·L24: Coexisting (ρ_l, ρ_v) at T: Newton on (ln ρ_l, ln ρ_v).
-- _printed(value, printed, half_unit)  ·L40
-- test_critical_pressure_table1()  ·L44
-- test_reference_state_saturated_liquid_273K()  ·L48
-- test_triple_point_pressure_table1()  ·L57
+- @functools.lru_cache _maxwell_newton(surf)  ·L27: (F, one Newton step) of the equal-p, equal-g system on ``surf``, jitted.
+- _maxwell(T, rho_l0, rho_v0, surf=nb, iters=40)  ·L39: Coexisting (ρ_l, ρ_v) at T on ``surf``: Newton on (ln ρ_l, ln ρ_v).
+- _printed(value, printed, half_unit)  ·L49
+- test_critical_pressure_table1()  ·L53
+- test_reference_state_saturated_liquid_273K()  ·L57
+- test_triple_point_pressure_table1()  ·L66
+
+### tests/test_nist2026_vs_coolprop.py
+_nist2026, the default backend, against CoolProp in Span-Wagner's stated region._
+- const CP  ·L31
+- const E  ·L35
+- const T1  ·L37
+- const P1  ·L40
+- const BANDS  ·L42
+- test_against_coolprop_in_the_stated_region()  ·L45
 
 ### tests/test_pressure_derivatives.py
 _The full-state dict satisfies the two exact thermodynamic identities._
@@ -679,14 +688,19 @@ _No tracked text file names the private working setup of the machine this repo i
 
 ### tests/test_reference_gases.py
 _The reference-gas backends (air, helium, argon) behind the ``eos=`` keyword._
-- const GASES  ·L22
-- const VALUES  ·L23
-- const TOL  ·L26
-- _table()  ·L29
-- const TABLE  ·L41
-- _model(gas)  ·L44
-- @pytest.mark.parametrize @pytest.mark.parametrize test_thermo_against_reference(gas, key, field)  ·L52
-- @pytest.mark.parametrize test_transport_against_the_published_check_values(gas, table)  ·L72
+- const GASES  ·L40
+- const VALUES  ·L41
+- const TOL  ·L45
+- _table()  ·L48
+- const TABLE  ·L60
+- _model(gas)  ·L63
+- @pytest.mark.parametrize @pytest.mark.parametrize test_against_the_stored_coolprop_values(gas, key, field)  ·L72
+- @pytest.mark.parametrize test_transport_against_the_published_check_values(gas, table)  ·L92
+- test_helium_transport_against_its_ab_initio_table()  ·L101: Helium's η and λ, the cubic fit in ln T, meet every row of Hurly and Mehl's table.
+
+### tests/test_saturation.py
+_The shipped saturation tables hold phase equilibrium, up to the critical point._
+- @pytest.mark.parametrize @pytest.mark.parametrize test_table_round_trip_against_maxwell(eos, T)  ·L31
 
 ## Other source files
 
