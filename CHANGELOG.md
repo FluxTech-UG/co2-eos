@@ -322,7 +322,7 @@ count (a long tail from a crude initial guess).
   only: the Newton polish sets accuracy and the IFT JVP sets gradients, so the
   table carries no accuracy or differentiability risk.
 - `bench/`: profiling and before/after benchmark scripts (CPU and the V100S
-  `gpu_bench.sh` harness for flux-compute).
+  `gpu_bench.sh` harness for a cloud GPU instance).
 
 ### Changed
 

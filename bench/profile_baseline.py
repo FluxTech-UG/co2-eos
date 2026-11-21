@@ -1,6 +1,6 @@
 """Baseline profiling of the co2-eos hot path (pre-redesign).
 
-Measures, on whatever device JAX sees (CPU locally, V100S on flux-compute):
+Measures, on whatever device JAX sees (CPU locally, a V100S on a cloud GPU instance):
 
   1. Per-call wall time of the building blocks that dominate the consumer's
      RHS evaluation:

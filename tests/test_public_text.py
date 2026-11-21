@@ -30,6 +30,7 @@ PRIVATE_MACHINERY = (
     "permission-triage",
     "guardrail/inbox",
     "cache-keeper",
+    "flux-compute",
 )
 EXEMPT = ("tests/test_public_text.py",)
 

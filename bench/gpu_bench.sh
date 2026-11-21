@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# Benchmark the economized EOS hot path on the OVH V100S via flux-compute.
+# Benchmark the economized EOS hot path on a cloud GPU instance (an OVH V100S).
 #
-#   flux-compute run --cloud flux-ovh --upload . \
-#       --script bench/gpu_bench.sh --fetch "bench-out:gpu-results"
-#
-# flux-compute uploads this repo to ~/co2-eos.  The Ubuntu 24.04 GPU image
+# Copy this repo to ~/co2-eos on the instance, run this script there, and copy
+# ~/bench-out back as gpu-results/.  The Ubuntu 24.04 GPU image
 # ships python3 without ensurepip/venv, so install those first; install
 # jax[cuda12] LAST so the CUDA jaxlib wins the resolve over co2-eos's jax dep.
 set -euo pipefail

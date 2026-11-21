@@ -680,9 +680,9 @@ _The full-state dict satisfies the two exact thermodynamic identities._
 _No tracked text file names the private working setup of the machine this repo is worked on._
 - const REPO  ·L20
 - const PRIVATE_MACHINERY  ·L22
-- const EXEMPT  ·L34
-- _tracked_files() -> list[str]  ·L37
-- test_no_tracked_text_names_the_private_setup()  ·L50
+- const EXEMPT  ·L35
+- _tracked_files() -> list[str]  ·L38
+- test_no_tracked_text_names_the_private_setup()  ·L51
 
 ### tests/test_reference_gases.py
 _The reference-gas backends (air, helium, argon) behind the ``eos=`` keyword._
@@ -702,4 +702,4 @@ _The shipped saturation tables hold phase equilibrium, up to the critical point.
 
 ## Other source files
 
-- bench/gpu_bench.sh  ·39 lines
+- bench/gpu_bench.sh  ·37 lines

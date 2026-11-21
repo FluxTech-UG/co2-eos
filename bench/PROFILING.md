@@ -98,14 +98,10 @@ Against the v0.1 autodiff baseline (`compare.py`, same machine, same day):
 | 1024 | 10486 | 255 | 41.1 | 11271 | 566  | **19.9×** |
 | 4096 | 19474 | 618 | 31.5 | 20595 | 1321 | **15.6×** |
 
-## 4. V100S GPU (OVH Tesla V100S-PCIE-32GB, via flux-compute)
+## 4. V100S GPU (OVH Tesla V100S-PCIE-32GB, a cloud GPU instance)
 
-Reproduce with:
-
-```bash
-flux-compute run --cloud flux-ovh --upload . \
-    --script bench/gpu_bench.sh --fetch "bench-out:gpu-results"
-```
+Reproduce by copying the repo to `~/co2-eos` on an Ubuntu 24.04 GPU instance,
+running `bench/gpu_bench.sh` there, and copying `~/bench-out` back as `gpu-results/`.
 
 `properties_from_rho_u`, µs/call; "v0.2" from the recorded campaign in
 `gpu-results/compare_gpu_scaling.json`, "now" from
