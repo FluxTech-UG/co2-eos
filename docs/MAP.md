@@ -601,23 +601,6 @@ _co2_eos with ``eos="span_wagner"`` bound: the public API and the submodules._
 - _bound(name)  ·L32
 - _instance(module, **extra)  ·L42
 
-### tests/span_wagner_probe.py
-_Evaluate the public API's Span-Wagner path on a fixed grid; write an .npz._
-- const _EOS  ·L24
-- const _NAMES  ·L25
-- class _Api  ·L35
-- put(prefix, value)  ·L48
-- const T1  ·L59
-- const R1  ·L61
-- const TT  ·L63
-- const RR  ·L64
-- const U  ·L68
-- const P1  ·L77
-- const T2  ·L78
-- const H1  ·L85
-- const TS  ·L91
-- const PS  ·L92
-
 ### tests/test_accuracy_vs_coolprop.py
 _Headline accuracy test against CoolProp._
 - const CP  ·L32
@@ -631,246 +614,60 @@ _Headline accuracy test against CoolProp._
 - @pytest.fixture region_data(request)  ·L112: Compute co2_eos and CoolProp values once per region.
 - @pytest.mark.parametrize test_matches_coolprop(region_data, quantity)  ·L135: Per (region, quantity), every grid point agrees with CoolProp to rtol.
 
-### tests/test_analytic_derivs.py
-_The hand-coded analytic Helmholtz derivatives must match jax.grad._
-- _grid()  ·L29
-- const PTS  ·L40
-- _rel(a, b)  ·L43
-- @pytest.mark.slow test_residual_derivs_match_autodiff()  ·L48
-- test_ideal_derivs_match_autodiff()  ·L65
-- test_fast_tau_path_matches_full()  ·L79: The δ-precomputed Newton inner-loop path equals the full bundle.
-
 ### tests/test_bulk_viscosity.py
-_Bulk viscosity ζ = ζ_vib + ζ_crit (0.5.0)._
-- const TABLE  ·L28
-- const IDS  ·L39
-- _parts(T, rho)  ·L42: (ζ_vib, ζ_crit, τ₁₁, ξ) at scalar (T, ρ) through the shipped kernels.
-- _rho(P, T)  ·L52
-- @pytest.mark.parametrize test_table_states(P, T, t11_ns, zvib, zcrit)  ·L59
-- @pytest.mark.parametrize test_public_entry_points_agree(P, T, t11_ns, zvib, zcrit)  ·L72
-- test_every_full_state_carries_bulk_viscosity()  ·L86
-- @pytest.mark.parametrize test_dilute_limit_against_cramer(T)  ·L98: 1 atm: τ₁₁ against Cramer's p·τ_v = 0.19152 (T/800 K)^−1.353 Pa·s.
-- test_zeta_crit_vanishes_where_xi_does()  ·L118
-- @pytest.mark.parametrize test_zero_frequency_holds_at_grid_top(P, T, t11_ns, zvib, zcrit)  ·L126: ω·τ₁₁ at 110 kHz (the N_x 2048 Nyquist on a 4 m loop) below 0.05.
-- test_mean_free_path_switch_is_smooth_and_faithful()  ·L132: The logistic switch tracks Lin & Trusler's hard switch at 896 kg/m³.
-- const GRAD_STATES  ·L148
-- @pytest.mark.parametrize test_jvp_and_grad_finite(T, rho)  ·L153
-- test_conductivity_gradient_finite_where_xi_is_zero()  ·L168: 0.5.0 fix: λ's gradient was NaN where the correlation length is zero.
-
-### tests/test_default_eos.py
-_The default backend is NIST IR 8608 (2026), ``eos="nist2026"``._
-- test_default_eos_is_nist2026()  ·L16
-- test_every_public_function_defaults_to_nist2026()  ·L20
-- test_batched_transport_names_its_backend()  ·L34: ``transport``'s batched functions take ``eos``; Span-Wagner is named.
-- _surface_constants()  ·L48: The public constant names a CO2 backend's surface carries (TC, PC, M, ...).
-- _off_default_constants(modules)  ·L58: Each ``module.NAME`` that shares a surface constant's name and differs
-- test_generic_constants_are_the_default_surface()  ·L68: No generic name holds a Span-Wagner constant.
-- test_critical_and_triple_point_follow_the_backend()  ·L87
-- test_submodule_names_are_the_nist2026_instance()  ·L109: Every generic module-level name of a submodule is its nist2026 form.
-- test_default_call_equals_named_nist2026_call()  ·L132
-
-### tests/test_density_from_PT_branch.py
-_density_from_PT below TC must land on the stable branch under the auto hint._
-- const CP  ·L33
-- const RTOL  ·L35
-- _ref(T, P)  ·L38
-- @pytest.mark.parametrize test_regression_points_match_liquid_hint_and_coolprop(T, P)  ·L50
-- const _MELT_MARGIN  ·L66
-- _melting_pressure(T)  ·L69
-- _subcritical_grid()  ·L74
-- @pytest.mark.parametrize test_auto_hint_follows_P_sat_below_TC(T, P, side)  ·L85
-- test_jit_vmap_mixed_hints()  ·L99
-- test_gradient_on_the_liquid_branch_near_the_old_hole()  ·L110
-- test_branch_guard_rejects_a_dome_root_under_auto_only()  ·L119
-
-### tests/test_dome_detection.py
-_Tests for two-phase dome detection in state_from_Ph._
-- const P_TEST  ·L23
-- @pytest.fixture dome_data()  ·L27: Precompute saturation data at P_TEST.
-- class TestDomeSweepLiquid  ·L41: Enthalpy sweep at P=7.1 MPa with LIQUID hint.
-  - test_all_finite(self, dome_data)  ·L44: All returned T and ρ are finite across h_l-50kJ to h_v+50kJ.
-  - test_T_equals_Tsat_inside_dome(self, dome_data)  ·L58: Inside dome, T should equal T_sat(P).
-  - test_rho_equals_rho_l_inside_dome(self, dome_data)  ·L70: Inside dome with LIQUID hint, ρ should equal ρ_l(P).
-- class TestDomeSweepVapor  ·L83: Enthalpy sweep at P=7.1 MPa with VAPOR hint.
-  - test_all_finite(self, dome_data)  ·L86: All returned T and ρ are finite across h_l-50kJ to h_v+50kJ.
-  - test_rho_equals_rho_v_inside_dome(self, dome_data)  ·L100: Inside dome with VAPOR hint, ρ should equal ρ_v(P).
-- class TestDomeCpPositive  ·L113: Cp computed from dome-returned (T, ρ) must be positive.
-  - test_cp_positive_liquid(self, dome_data)  ·L116: Cp > 0 across entire sweep with LIQUID hint.
-  - test_cp_positive_vapor(self, dome_data)  ·L131: Cp > 0 across entire sweep with VAPOR hint.
-- class TestDomeGradients  ·L147: Gradients through state_from_Ph at a point inside the dome.
-  - test_grad_finite_inside_dome(self, dome_data)  ·L150: jax.grad returns finite values for a point inside the dome.
-  - test_jvp_finite_inside_dome(self, dome_data)  ·L174: JVP returns finite tangents for a point inside the dome.
-- class TestDomeSupercriticalBypass  ·L188: At supercritical P, dome detection should not activate.
-  - test_supercritical_unchanged(self)  ·L191: state_from_Ph at P > PC should behave exactly as before.
+_Bulk viscosity ζ = ζ_vib + ζ_crit: the dilute limit against Cramer (2012)._
+- _parts(T, rho)  ·L13: (ζ_vib, ζ_crit, τ₁₁, ξ) at scalar (T, ρ) through the shipped kernels.
+- _rho(P, T)  ·L23
+- @pytest.mark.parametrize test_dilute_limit_against_cramer(T)  ·L30: 1 atm: τ₁₁ against Cramer's p·τ_v = 0.19152 (T/800 K)^−1.353 Pa·s.
 
 ### tests/test_fastpath_validation.py
 _The economized (ρ, u) fast path must match the independent oracle chain._
-- const _REPO  ·L24
-- @pytest.fixture envelope()  ·L32
-- test_properties_vs_oracle(envelope)  ·L37: Every property ≤ 5e-10 rel vs the independent chain (measured ~1e-10).
-- @pytest.mark.slow test_derivatives_vs_ift_oracle(envelope)  ·L48: d(q)/d(ρ,u), forward and reverse, ≤ 1e-9 vs IFT-oracle references.
-- test_chi_ref_cheb_matches_exact_bundle()  ·L73: The precomputed Chebyshev equals the exact bundle at τ_ref ≤ 5e-12.
-- test_inversion_roundoff_at_three_iterations(envelope)  ·L88: 3 fixed Newton steps from the v2 seed reach ≤ 1e-11 K single-phase.
-
-### tests/test_generic_names.py
-_Generic names hold no Span-Wagner content, and the docs state the current state._
-- const PKG  ·L18
-- const ROOT  ·L19
-- _docstrings(path)  ·L22
-- const SPAN_WAGNER_MODULES  ·L29
-- const SPAN_WAGNER_IMPORTERS  ·L33
-- _span_wagner_imports(source)  ·L36: Every import of a Span-Wagner module in ``source``, as text, in any form:
-- @pytest.mark.parametrize test_span_wagner_import_scan_sees_every_form(source)  ·L74
-- @pytest.mark.parametrize test_span_wagner_import_scan_passes_other_imports(source)  ·L84
-- test_span_wagner_content_lives_under_span_wagner_names()  ·L88: Only a module named for Span-Wagner, the registry ``backends`` and
-- test_docs_state_the_current_state()  ·L103
-- test_generic_modules_describe_every_backend()  ·L111
-- test_inversion_temperature_ceiling_has_one_home()  ·L121: The inversions' upper T bound is ``backends.INVERSION_T_MAX``, read by
-- test_launch_demo_runs_span_wagner_against_coolprop()  ·L131: The notebook compares with CoolProp, whose CO2 is Span-Wagner: every
-- @pytest.mark.parametrize test_missing_tables_raise(eos, monkeypatch, tmp_path)  ·L146: A missing seed or chi table raises at the first call that needs it,
-- @pytest.mark.parametrize test_missing_saturation_table_raises(eos, monkeypatch, tmp_path)  ·L163: ``inversions._build`` tolerates an absent saturation table (the table
+- const _REPO  ·L20
+- @pytest.fixture envelope()  ·L28
+- test_properties_vs_oracle(envelope)  ·L33: Every property ≤ 5e-10 rel vs the independent chain (measured ~1e-10).
 
 ### tests/test_inversion_gradients.py
-_Forward-mode (jvp) and reverse-mode (grad/vjp) gradients through every inversion._
-- finite_diff(f, x, idx, rel_eps=1e-07)  ·L30: Central finite difference of f with respect to x[idx].
-- assert_close(a, b, rtol=0.0001, atol=1e-08, name='')  ·L49: Assert two values are close, with helpful error message.
-- const T_SC  ·L64
-- const P_SC  ·L65
-- const HINT_SC  ·L66
-- const T_LIQ  ·L69
-- const P_LIQ  ·L70
-- const HINT_LIQ  ·L71
-- const T_VAP  ·L74
-- const P_VAP  ·L75
-- const HINT_VAP  ·L76
-- class TestDensityFromPT  ·L83: Forward and reverse AD through density_from_PT.
-  - @pytest.fixture test_point(self, request)  ·L91
-  - test_jvp_finite(self, test_point)  ·L95
-  - test_grad_finite(self, test_point)  ·L104
-  - test_jvp_matches_fd(self, test_point)  ·L111
-  - test_vjp_matches_fd(self, test_point)  ·L125
-- class TestStateFromPh  ·L141: Forward and reverse AD through state_from_Ph.
-  - @pytest.fixture test_point(self, request)  ·L149
-  - test_jvp_finite(self, test_point)  ·L159
-  - test_grad_finite(self, test_point)  ·L168
-  - test_jvp_matches_fd(self, test_point)  ·L177
-  - test_vjp_matches_fd(self, test_point)  ·L193
-- class TestTemperatureFromDu  ·L211: Forward and reverse AD through temperature_from_Du.
-  - @pytest.fixture test_point(self, request)  ·L218
-  - test_jvp_finite(self, test_point)  ·L225
-  - test_grad_finite(self, test_point)  ·L234
-  - test_jvp_matches_fd(self, test_point)  ·L241
-  - test_vjp_matches_fd(self, test_point)  ·L251
-- class TestStateFromDu  ·L265: Forward and reverse AD through state_from_Du.
-  - @pytest.fixture test_point(self, request)  ·L272
-  - test_jvp_finite(self, test_point)  ·L279
-  - test_grad_finite(self, test_point)  ·L288
-  - test_jvp_matches_fd(self, test_point)  ·L297
-  - test_vjp_matches_fd(self, test_point)  ·L315
-
-### tests/test_map_fresh.py
-_Guard: docs/MAP.md stays in sync with the source._
-- const REPO_ROOT  ·L14
-- test_map_is_fresh()  ·L17
-
-### tests/test_nist2026_backend.py
-_The static ``eos`` switch reaches every public function, on nist2026 too._
-- const E  ·L20
-- test_unknown_eos_raises()  ·L23
-- test_every_public_function_takes_eos()  ·L30
-- test_backends_differ_where_they_should()  ·L60
-- test_rho_u_round_trip_at_round_off_near_critical()  ·L68
-- test_gradients_finite_at_the_widom_crossing()  ·L79
-- test_transport_reads_the_nist2026_surface()  ·L87
+_Reverse-mode gradients (jax.grad, through the custom_jvp rule) of_
+- finite_diff(f, x, idx, rel_eps=1e-07)  ·L22: Central finite difference of f with respect to x[idx].
+- assert_close(a, b, rtol=0.0001, atol=1e-08, name='')  ·L41: Assert two values are close, with helpful error message.
+- const T_SC  ·L56
+- const P_SC  ·L57
+- const HINT_SC  ·L58
+- const T_LIQ  ·L61
+- const P_LIQ  ·L62
+- const HINT_LIQ  ·L63
+- class TestStateFromDu  ·L70: Forward and reverse AD through state_from_Du.
+  - @pytest.fixture test_point(self, request)  ·L77
+  - test_vjp_matches_fd(self, test_point)  ·L84
 
 ### tests/test_nist2026_derivs.py
 _The nist2026 analytic Helmholtz derivatives must match jax.grad._
-- _grid()  ·L37
-- const PTS  ·L50
-- _rel(a, b)  ·L53
-- test_residual_derivs_match_autodiff()  ·L57
-- test_ideal_derivs_match_autodiff()  ·L67
-- test_fast_tau_path_matches_full()  ·L80: The δ-precomputed Newton inner-loop pair equals the full bundle.
-- test_kernel_is_jittable_vmappable_and_twice_differentiable()  ·L91
-- test_steep_gaussians_underflow_cleanly_at_the_widom_crossing()  ·L102: Terms 22 to 24 (β = 2.2e4, 6e4, 1e6) centre below T_c; at FluxTech's
-
-### tests/test_nist2026_near_critical.py
-_The near-critical regression the nist2026 backend exists for._
-- const TC  ·L38
-- const T_ISO  ·L39
-- const RHO_ISO  ·L40
-- const M_NIST  ·L41
-- _dcv_dT(eos)  ·L44
-- _turning_points(y)  ·L51
-- test_dcv_dT_monotone_and_finite_on_nist2026()  ·L56
-- test_dcv_dT_oscillates_on_span_wagner()  ·L69
-- _scan(eos, T, key)  ·L81
-- @pytest.mark.parametrize test_single_smooth_peak_on_nist2026(T, key, peak, at)  ·L96
-- @pytest.mark.parametrize test_span_wagner_dip(T, key)  ·L105
+- _grid()  ·L35
+- const PTS  ·L48
+- _rel(a, b)  ·L51
+- test_residual_derivs_match_autodiff()  ·L55
+- test_ideal_derivs_match_autodiff()  ·L65
 
 ### tests/test_nist2026_saturation.py
-_The nist2026 saturation table, its auxiliary-equation check and the dome._
-- const E  ·L29
-- _aux(T, a, t)  ·L32
-- test_auxiliary_equations_against_table()  ·L37
-- @pytest.mark.parametrize test_table_round_trip_against_maxwell(T)  ·L51
-- const P_DOME  ·L65
-- test_dome_detection_on_nist2026()  ·L68
-- test_dome_gradients_finite_on_nist2026()  ·L88
+_The shipped nist2026 saturation table holds phase equilibrium._
+- const E  ·L16
+- @pytest.mark.parametrize test_table_round_trip_against_maxwell(T)  ·L20
 
 ### tests/test_nist2026_verification.py
 _nist2026 reproduces the values NIST IR 8608 computes from its equation._
-- _maxwell(T, rho_l0, rho_v0, iters=40)  ·L31: Coexisting (ρ_l, ρ_v) at T: Newton on (ln ρ_l, ln ρ_v).
-- _printed(value, printed, half_unit)  ·L47
-- test_critical_pressure_table1()  ·L51
-- test_critical_density_mass_units_p3()  ·L55
-- test_critical_point_conditions()  ·L59
-- test_reference_state_saturated_liquid_273K()  ·L67
-- test_triple_point_pressure_table1()  ·L76
-- test_acentric_factor_table1()  ·L81
-
-### tests/test_nist2026_vs_span_wagner.py
-_nist2026 against Span-Wagner away from the critical point._
-- const T1  ·L38
-- const P1  ·L39
-- const STATED  ·L41
-- const BANDS  ·L42
-- _states(eos)  ·L49
-- @pytest.fixture both()  ·L58
-- _check(ref, nb, keep, key)  ·L69
-- @pytest.mark.parametrize test_against_span_wagner(both, key)  ·L78
-- test_reference_state_shared()  ·L84
-- test_enthalpy_entropy_differences_bounded(both)  ·L93
-- test_against_coolprop(both)  ·L99
-
-### tests/test_no_coolprop_runtime.py
-_Discipline test: the runtime package must not import CoolProp._
-- const PKG_ROOT  ·L16
-- _imports_coolprop(tree: ast.AST) -> bool  ·L19
-- test_no_coolprop_in_runtime_package()  ·L30
-
-### tests/test_no_em_dash.py
-_Guard: tracked prose and source carry no em dash (U+2014)._
-- const REPO_ROOT  ·L11
-- const EM_DASH  ·L12
-- const SUFFIXES  ·L13
-- const EXCLUDED  ·L14
-- _tracked_files()  ·L17
-- test_no_em_dash_in_tracked_text()  ·L24
+- _maxwell(T, rho_l0, rho_v0, iters=40)  ·L24: Coexisting (ρ_l, ρ_v) at T: Newton on (ln ρ_l, ln ρ_v).
+- _printed(value, printed, half_unit)  ·L40
+- test_critical_pressure_table1()  ·L44
+- test_reference_state_saturated_liquid_273K()  ·L48
+- test_triple_point_pressure_table1()  ·L57
 
 ### tests/test_pressure_derivatives.py
-_The pressure derivatives in the full-state dict, and the batched (ρ, T) call._
-- const STATES  ·L21
-- const IDS  ·L26
-- _rel(a, b)  ·L32
-- _T_rho(P, T, hint)  ·L36
-- @pytest.mark.parametrize test_derivatives_match_autodiff_pressure(P, T, hint, label)  ·L43
-- @pytest.mark.parametrize test_thermodynamic_identities(P, T, hint, label)  ·L51
-- _batch()  ·L61
-- test_rho_T_batched_matches_vmap_scalar()  ·L67
-- test_rho_T_batched_rejects_bad_shapes()  ·L77
-- test_every_full_state_dict_carries_the_derivatives()  ·L84
-- test_derivatives_survive_jit_vmap_and_grad()  ·L105
+_The full-state dict satisfies the two exact thermodynamic identities._
+- const STATES  ·L16
+- const IDS  ·L21
+- _rel(a, b)  ·L23
+- _T_rho(P, T, hint)  ·L27
+- @pytest.mark.parametrize test_thermodynamic_identities(P, T, hint, label)  ·L34
 
 ### tests/test_public_text.py
 _No tracked text file names the private working setup of the machine this repo is worked on._
@@ -882,64 +679,14 @@ _No tracked text file names the private working setup of the machine this repo i
 
 ### tests/test_reference_gases.py
 _The reference-gas backends (air, helium, argon) behind the ``eos=`` keyword._
-- const GASES  ·L25
-- const VALUES  ·L26
-- const TOL  ·L29
-- const TOL_HELIUM_TRANSPORT_ABOVE  ·L33
-- const TOL_ENERGY_SPAN  ·L36
-- _one_percent_limit(gas)  ·L39: Pa, the pressure the 1 % transport bar stands to, past a solve's round-off.
-- _table()  ·L46
-- const TABLE  ·L58
-- _model(gas)  ·L61
-- _state_grid(gas)  ·L67
-- test_names_in_the_registry()  ·L78
-- @pytest.mark.parametrize test_consumer_call_returns_the_span_wagner_bundle(gas)  ·L86
-- @pytest.mark.parametrize test_saturation_refuses_with_the_reason(gas)  ·L99
-- test_unknown_name_refused()  ·L106
-- @pytest.mark.parametrize @pytest.mark.parametrize test_thermo_against_reference(gas, key, field)  ·L115
-- @pytest.mark.parametrize test_density_against_reference(gas)  ·L124
-- @pytest.mark.parametrize @pytest.mark.parametrize test_transport_against_reference(gas, key, field)  ·L134: 1 % to P_MAX on air and argon.  Helium, dilute only: 1 % to Swift's top state.
-- test_helium_transport_limit_covers_swift()  ·L150: The limit is Swift's top state, 13.8 bar, with its swing: every stored Swift row is in.
-- @pytest.mark.parametrize @pytest.mark.parametrize test_energy_differences_against_reference(gas, key, field)  ·L161
-- test_rig_states_are_in_the_stored_table()  ·L170
-- @pytest.mark.parametrize test_monatomic_limit(gas)  ·L179: c_p → (5/2)R as ρ → 0 at every T; the bulk viscosity is exactly 0.
-- @pytest.mark.parametrize test_dilute_limit_is_the_ideal_gas_law(gas)  ·L193
-- const _REL_FLOOR  ·L203
-- _rel(a, b)  ·L206
-- @pytest.mark.parametrize test_residual_derivs_match_autodiff(gas)  ·L211
-- @pytest.mark.parametrize test_ideal_derivs_match_autodiff(gas)  ·L230
-- @pytest.mark.parametrize test_fast_tau_path_matches_full(gas)  ·L247
-- @pytest.mark.parametrize test_bundle_identities(gas)  ·L259: β, K_T, K_s, w and the heat capacities close against autodiff of a(ρ, T).
-- @pytest.mark.parametrize test_rho_u_inversion_round_trip(gas)  ·L303
-- @pytest.mark.parametrize test_density_from_pt_round_trip(gas)  ·L315
-- @pytest.mark.parametrize test_state_from_ph_round_trip(gas)  ·L324
-- _fd(f, x, h)  ·L333
-- @pytest.mark.parametrize test_jit_vmap_grad_of_the_consumer_call(gas)  ·L338
-- @pytest.mark.parametrize test_inversion_gradients(gas)  ·L360
-- @pytest.mark.parametrize test_outside_the_domain_is_nan(gas)  ·L397
-- _published(fluid)  ·L416
-- @pytest.mark.parametrize test_residual_terms_match_the_published_table(gas, fluid)  ·L422
-- @pytest.mark.parametrize test_transport_against_the_published_check_values(gas, table)  ·L456
-- test_helium_transport_reads_its_ab_initio_table()  ·L465
-- test_helium_second_virial_against_ab_initio()  ·L480: B(T) of the series against Hurly and Mehl (2007) Table 5, 200 to 1000 K.
-- @pytest.mark.parametrize test_transport_terms_match_the_published_table(gas, fluid)  ·L490
-
-### tests/test_rho_u_inversion.py
-_The (ρ, u) → T inversion and the fused properties_from_rho_u path._
-- _u(T, rho)  ·L22
-- @pytest.mark.parametrize test_roundtrip_under_1e8(label, Tlo, Thi, rlo, rhi)  ·L34
-- test_fused_matches_properties()  ·L44: properties_from_rho_u(ρ,u) == properties(T_recovered, ρ) elementwise.
-- _fd(f, x, i, eps=1e-06)  ·L65
-- @pytest.mark.parametrize test_inversion_gradients(T0, rho0)  ·L74
-- test_properties_from_rho_u_differentiable()  ·L92: grad through the fused path (e.g. dP/du) is finite and matches FD.
-
-### tests/test_span_wagner_bit_for_bit.py
-_The Span-Wagner backend, named with ``eos="span_wagner"``, is bit for bit 0.5.0._
-- const REPO  ·L23
-- const PROBE  ·L24
-- const REF_COMMIT  ·L25
-- _run_probe(root, out, *eos)  ·L28
-- @pytest.mark.slow test_span_wagner_bit_for_bit(tmp_path)  ·L45
+- const GASES  ·L22
+- const VALUES  ·L23
+- const TOL  ·L26
+- _table()  ·L29
+- const TABLE  ·L41
+- _model(gas)  ·L44
+- @pytest.mark.parametrize @pytest.mark.parametrize test_thermo_against_reference(gas, key, field)  ·L52
+- @pytest.mark.parametrize test_transport_against_the_published_check_values(gas, table)  ·L72
 
 ## Other source files
 

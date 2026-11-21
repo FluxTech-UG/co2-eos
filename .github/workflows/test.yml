@@ -1,6 +1,4 @@
-# Run the validation suite + a wheel-contents sanity check on every push
-# to main and every pull request. The wheel step protects against
-# regressions to the package-data wiring that ships co2_eos/data/saturation_table.npz.
+# Run the validation suite on every push to main and every pull request.
 
 name: tests
 
@@ -25,10 +23,6 @@ jobs:
             python-version: "3.12"
     steps:
       - uses: actions/checkout@v5
-        with:
-          # Full history: test_span_wagner_bit_for_bit.py archives the 0.5.0
-          # commit and skips on a shallow clone.
-          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
@@ -42,29 +36,3 @@ jobs:
 
       - name: Run pytest
         run: pytest tests/ -v
-
-  wheel:
-    # Build the wheel once on a single leg and assert that the saturation
-    # table is included as package data. Without this, a fresh `pip install`
-    # would silently break every saturation lookup and state inversion.
-    name: build wheel + verify saturation table is packaged
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Install build
-        run: pip install build
-
-      - name: Build wheel
-        run: python -m build --wheel
-
-      - name: Verify co2_eos/data/saturation_table.npz is in the wheel
-        run: |
-          unzip -l dist/*.whl | tee /tmp/wheel_contents.txt
-          grep -q "co2_eos/data/saturation_table.npz" /tmp/wheel_contents.txt

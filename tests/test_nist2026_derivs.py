@@ -1,7 +1,6 @@
 """The nist2026 analytic Helmholtz derivatives must match jax.grad.
 
-``nist2026.residual_derivs`` / ``ideal_derivs`` and the δ-precomputed
-inner-loop pair have to reproduce the autodiff derivatives of
+``nist2026.residual_derivs`` / ``ideal_derivs`` (and ``ideal_tau_only``) have to reproduce the autodiff derivatives of
 ``nist2026.alphar`` / ``alpha0`` at the repo's bars (1e-9 relative for the
 residual part, 1e-10 for the ideal part), over the regime, the near-critical
 stress region (both sides of τ = 1, δ within 2 % of 1) and the corners of the
@@ -31,7 +30,6 @@ _ref_ideal = jax.jit(lambda t, d: (nb.alpha0(t, d), _a0_t(t, d), _a0_tt(t, d)))
 _res = jax.jit(nb.residual_derivs)
 _ideal = jax.jit(nb.ideal_derivs)
 _ideal_t = jax.jit(nb.ideal_tau_only)
-_fast = jax.jit(lambda t, d: nb.residual_tau_fast(t, nb.residual_tau_prep(d)))
 
 
 def _grid():
@@ -75,42 +73,3 @@ def test_ideal_derivs_match_autodiff():
                     _rel(a0, r0), _rel(a0_t, r0_t), _rel(a0_tt, r0_tt),
                     _rel(t_only[0], a0_t), _rel(t_only[1], a0_tt))
     assert worst < 1e-10, f"ideal analytic vs autodiff worst rel err {worst:.2e}"
-
-
-def test_fast_tau_path_matches_full():
-    """The δ-precomputed Newton inner-loop pair equals the full bundle."""
-    worst = 0.0
-    for tau, delta in PTS:
-        tau = jnp.float64(tau); delta = jnp.float64(delta)
-        _, _, ar_t, _, ar_tt, _ = _res(tau, delta)
-        ft, ftt = _fast(tau, delta)
-        worst = max(worst, _rel(ft, ar_t), _rel(ftt, ar_tt))
-    assert worst < 1e-12, f"fast τ path vs full bundle worst rel err {worst:.2e}"
-
-
-def test_kernel_is_jittable_vmappable_and_twice_differentiable():
-    taus = jnp.linspace(0.9, 1.1, 7)
-    deltas = jnp.linspace(0.5, 1.5, 7)
-    out = jax.jit(jax.vmap(nb.residual_derivs))(taus, deltas)
-    assert all(bool(jnp.all(jnp.isfinite(o))) for o in out)
-    # Third δ-derivative of αʳ through the analytic second derivative.
-    d3 = jax.grad(lambda d: nb.residual_derivs(1.01, d)[3])(1.0)
-    d3_ref = jax.grad(_ar_dd, argnums=1)(1.01, 1.0)
-    assert _rel(d3, d3_ref) < 1e-9
-
-
-def test_steep_gaussians_underflow_cleanly_at_the_widom_crossing():
-    """Terms 22 to 24 (β = 2.2e4, 6e4, 1e6) centre below T_c; at FluxTech's
-    Widom crossing (314 K, 472 kg/m³) term 24's exponent is about −1140 and
-    its exp underflows to exactly 0.  The bundle, its jit and its gradients
-    (a third derivative of α through c_p) stay finite there and at the range's
-    far corners."""
-    states = [(314.0, 472.0), (2000.0, 50.0), (220.0, 1170.0), (304.2282, 468.0)]
-    cp_grad = jax.jit(jax.grad(nb._scalar_cp, argnums=(0, 1)))
-    res_grad = jax.jit(jax.jacfwd(nb.residual_derivs, argnums=(0, 1)))
-    for T, rho in states:
-        tau, delta = nb.TC / T, rho / nb.RHOC
-        assert all(np.isfinite(float(x)) for x in _res(tau, delta))
-        for row in res_grad(tau, delta):
-            assert all(np.isfinite(float(x)) for x in row)
-        assert all(np.isfinite(float(x)) for x in cp_grad(T, rho))

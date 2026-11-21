@@ -37,36 +37,34 @@ current symbol-level inventory. The shape:
   `saturation.saturation_pressure`, ...) are the nist2026 instance. Span-Wagner is reached
   by its own name only: `eos="span_wagner"`, a submodule's `for_eos("span_wagner")`, the
   `span_wagner` module and its analytic kernel `span_wagner_kernel`. A module holding
-  Span-Wagner content carries the name (`tests/test_generic_names.py`); the transport
+  Span-Wagner content carries the name; the transport
   correlations' Span-Wagner reducing parameters are private (`transport._CORR_*`). Each backend carries its own R,
   M, ρ_c and tables (`<stem>_nist2026.npz`, from the scripts' `--eos`). `eos="span_wagner"`
-  is bit for bit 0.5.0 (`tests/test_span_wagner_bit_for_bit.py`, live against a `git
-  archive` of 0.5.0); keep it so until a release says otherwise. `tests/test_default_eos.py`
-  holds the default on every public and submodule name. Tests that validate Span-Wagner
-  reach it through `tests/span_wagner_api.py`; a bench names the backend it runs.
-- `tests/`: the validation suite; it is the package's contract (see Critical rules).
+  is bit for bit 0.5.0; keep it so until a release says otherwise. Tests that validate
+  Span-Wagner reach it through `tests/span_wagner_api.py`; a bench names the backend it runs.
+- `tests/`: the validation suite, each test against a reference from outside the code (see
+  Tests).
 - `bench/`: profiling and validation studies; `scripts/`: table generation;
   `examples/`: the launch demo.
 
 ## Tests
 
-Two tiers, split by the `slow` marker (registered in `pyproject.toml`):
+A test here checks the package against a reference from outside its own code (a value
+NIST IR 8608 prints, CoolProp, a published table, an exact identity, `jax.grad`, finite
+differences) where a wrong result would otherwise look fine. A failure that shows itself
+in use (an error, a crash, a missing file) gets no test. One guard sits beside them:
+`tests/test_public_text.py` holds the public text free of the private working setup's
+names, because a published leak cannot be taken back.
 
-- **`make test`**: every test not marked `slow`, on 8 xdist workers (`--dist loadfile`),
-  about 75 s on the laptop. Needs only the `[test]` extra.
-- **`make slow`**: the three tests marked `slow` (`test_residual_derivs_match_autodiff`,
-  `test_derivatives_vs_ift_oracle`, `test_span_wagner_bit_for_bit`), each 75 to 110 s, run on 3
-  workers. A change to the Helmholtz derivatives, the fast path or the Span-Wagner backend runs
-  it before its commit; the acceptance bar below counts these tests.
+- **`make test`**: the suite on 8 xdist workers (`--dist loadfile`), about 20 s on the
+  laptop. Needs only the `[test]` extra.
 - **`make gate`**: the commit gate, run as `gate <repo path>`. It is `make test` with the
-  `pytest_budget` plugin loaded, which fails any test not marked `slow` whose setup + call +
-  teardown runs over `TEST_BUDGET_S`, with "mark it slow or shrink it". `gate` fails a run
-  longer than `GATE_BUDGET_S`. Both budgets live in the `Makefile`, sized for a machine
-  running other suites beside this one: the first JAX compile of a test's gradient lands on
-  whichever test triggers it and stretches with the load.
+  `pytest_budget` plugin loaded, which fails any test whose setup + call + teardown runs
+  over `TEST_BUDGET_S`. `gate` fails a run longer than `GATE_BUDGET_S`. Both budgets live in
+  the `Makefile`.
 
-CI runs `pytest tests/ -v`: every test, both tiers, without the budget plugin. Only `make gate`
-loads the plugin, so a clone without it runs the plain suite.
+CI runs `pytest tests/ -v` without the budget plugin. Only `make gate` loads the plugin, so
+a clone without it runs the plain suite.
 
 ## Critical rules
 
@@ -77,22 +75,21 @@ critical point) live in exactly one place and every other site derives from them
 
 **Every property derives from the Helmholtz free energy A(T, ρ).** Pressure, heat
 capacities, speed of sound, and the rest come from the hand-coded analytic
-α-derivatives. They are validated against `jax.grad` by `tests/test_analytic_derivs.py`
-(relative error below 1e-9 for the residual part and 1e-10 for the ideal part); if they
-fail that bar, the derivatives are wrong, not the tolerance.
+α-derivatives. On nist2026 they are validated against `jax.grad` by
+`tests/test_nist2026_derivs.py` (relative error below 1e-9 for the residual part and 1e-10
+for the ideal part); if they fail that bar, the derivatives are wrong, not the tolerance.
 
 **CoolProp is a test-only dependency: never reachable from an import of the package.**
 It generates validation data and the offline tables; shipped code never calls it.
-`tests/test_no_coolprop_runtime.py` guards this.
 
 **Preserve differentiability, JIT, and vmap.** The code is pure JAX: no Python-side
 data-dependent branching that breaks tracing, no NumPy on the traced path. Use `jax.lax`
 control flow for anything that depends on a traced value, so `jit`, `vmap`, `grad`, and
 `custom_jvp` keep working end-to-end.
 
-**Accuracy is validated against CoolProp across the full valid range.** The test suite
-(`tests/test_accuracy_vs_coolprop.py`, `test_analytic_derivs.py`,
-`test_inversion_gradients.py`, `test_dome_detection.py`) is the acceptance bar; a change
-is done when it is green. The reference gases meet stated tolerances against the stored
-CoolProp values of `tests/data/reference_gas_values.csv` (`tests/test_reference_gases.py`):
-density 0.05 %, c_p 0.2 %, μ and k 1 %, helium's transport to `P_ONE_PERCENT`.
+**Accuracy is validated against outside references.** The test suite is the acceptance
+bar; a change is done when it is green. nist2026 meets the values NIST IR 8608 prints;
+Span-Wagner meets CoolProp (`tests/test_accuracy_vs_coolprop.py`); the reference gases
+meet the stored CoolProp values of `tests/data/reference_gas_values.csv` (c_p and c_v
+0.2 %, speed of sound 0.1 %) and the transport check values Lemmon and Jacobsen (2004)
+print (`tests/test_reference_gases.py`).

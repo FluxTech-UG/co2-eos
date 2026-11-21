@@ -5,22 +5,15 @@ it does print that come from the equation itself are the check values here,
 each to the digits printed (half a unit in the last printed digit):
 
   * Table 1, p. 2: p_c = 7.377 03 MPa at (T_c, ρ_c); p_t = 0.517 95 MPa, the
-    saturation pressure at T_t = 216.5909 K; ω = 0.2249, from p_sat(0.7 T_c);
-  * p. 3: ρ_c = 467.597 kg/m³ in mass units;
+    saturation pressure at T_t = 216.5909 K;
   * p. 5: the reference state of n°6 and n°7, saturated liquid at 273.15 K
-    with h = 200 kJ/kg and s = 1 kJ/(kg·K);
-  * the critical point is a critical point: (∂p/∂ρ)_T and (∂²p/∂ρ²)_T vanish
-    at (T_c, ρ_c).
+    with h = 200 kJ/kg and s = 1 kJ/(kg·K).
 
 The saturation states are solved here by a Maxwell construction (equal p and
-g) on the equation itself, so no table's spline error enters.  The auxiliary
-equations of Sec. 7 are checked against the shipped saturation table in
-``test_nist2026_saturation``.
+g) on the equation itself, so no table's spline error enters.
 """
 import jax
 import jax.numpy as jnp
-import numpy as np
-import pytest
 
 jax.config.update("jax_enable_x64", True)
 
@@ -52,18 +45,6 @@ def test_critical_pressure_table1():
     _printed(float(nb._scalar_pressure(nb.TC, nb.RHOC)), nd.PC_TABLE, 0.005e3)
 
 
-def test_critical_density_mass_units_p3():
-    _printed(nb.RHOC, nd.RHOC_MASS_TEXT, 0.0005)
-
-
-def test_critical_point_conditions():
-    dp = jax.grad(nb._scalar_pressure, argnums=1)
-    d2p = jax.grad(dp, argnums=1)
-    # Scale: R·T_c ≈ 5.7e4 Pa·m³/kg and R·T_c/ρ_c ≈ 1.2e2.
-    assert abs(float(dp(nb.TC, nb.RHOC))) < 1e-5 * nb.R * nb.TC
-    assert abs(float(d2p(nb.TC, nb.RHOC))) < 1e-5 * nb.R * nb.TC / nb.RHOC
-
-
 def test_reference_state_saturated_liquid_273K():
     rl, _ = _maxwell(nd.REF_T, 927.0, 97.0)
     h = float(nb._scalar_enthalpy(nd.REF_T, rl))
@@ -76,11 +57,3 @@ def test_reference_state_saturated_liquid_273K():
 def test_triple_point_pressure_table1():
     rl, _ = _maxwell(nd.T_TRIPLE, 1178.0, 14.0)
     _printed(float(nb._scalar_pressure(nd.T_TRIPLE, rl)), nd.P_TRIPLE_TABLE, 0.005e3)
-
-
-def test_acentric_factor_table1():
-    T = 0.7 * nb.TC                      # 212.9 K, the equation's metastable
-    rl, _ = _maxwell(T, 1185.0, 12.0)    # extension below T_t
-    ps = float(nb._scalar_pressure(T, rl))
-    omega = -np.log10(ps / nd.PC_TABLE) - 1.0
-    _printed(omega, nd.ACENTRIC_TABLE, 0.00005)

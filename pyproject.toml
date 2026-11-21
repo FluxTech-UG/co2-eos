@@ -60,6 +60,3 @@ co2_eos = ["data/*.npz"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = [
-    "slow: a test that runs over a minute on a laptop; `make slow` runs them, `make test` leaves them out, CI runs every test",
-]

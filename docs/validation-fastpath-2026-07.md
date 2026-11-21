@@ -81,14 +81,6 @@ spectral convergence (α_ττ error O(1) at degree 80), and a smooth-part-only
 fit tops out at ~1e-7..1e-8, consistent with the published near-critical
 accuracy collapse of SBTL/TTSE-class table methods.
 
-## CI guardrails (tests/test_fastpath_validation.py)
+## CI guardrail (tests/test_fastpath_validation.py)
 
-- every property ≤ 5e-10 vs the oracle chain on a 1.5k envelope sample;
-- every derivative, both AD modes, ≤ 1e-9 vs IFT-oracle references;
-- chi_ref Chebyshev ≤ 5e-12 vs the exact bundle over δ ∈ [0, 2.75];
-- 3-iteration inversion ≤ 1e-11 K vs the generating temperatures.
-
-Plus the pre-existing suites: analytic α-derivatives vs `jax.grad` of the
-oracle, accuracy vs CoolProp 7.2.0 across three regions, jvp/vjp checks
-through every inversion, dome detection, and the CoolProp-free-runtime
-guard.
+- every property ≤ 5e-10 vs the oracle chain on a 1.5k envelope sample.

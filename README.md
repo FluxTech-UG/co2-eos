@@ -109,7 +109,7 @@ CO2-EOS solves this for CO₂ by implementing the reference equations of state d
 
 ## What's included
 
-**Equations of state**: two full formulations for CO₂, NIST IR 8608 (Lemmon, Harvey and Hellmann 2026, `eos="nist2026"`, the default) and Span-Wagner (1996, `eos="span_wagner"`). On each, the Helmholtz free energy is A(T, ρ), with all thermodynamic properties derived from hand-coded analytic α-derivatives (validated against `jax.grad`: Span-Wagner to < 3e-12, NIST IR 8608 to 1e-9 for the residual part and 1e-10 for the ideal part, `tests/test_nist2026_derivs.py`):
+**Equations of state**: two full formulations for CO₂, NIST IR 8608 (Lemmon, Harvey and Hellmann 2026, `eos="nist2026"`, the default) and Span-Wagner (1996, `eos="span_wagner"`). On each, the Helmholtz free energy is A(T, ρ), with all thermodynamic properties derived from hand-coded analytic α-derivatives (on NIST IR 8608 checked against `jax.grad` to 1e-9 for the residual part and 1e-10 for the ideal part, `tests/test_nist2026_derivs.py`; on Span-Wagner checked through the property comparison with CoolProp below):
 
 - Pressure, internal energy, enthalpy, entropy
 - Isochoric and isobaric heat capacities (Cv, Cp)
@@ -145,7 +145,7 @@ On `eos="span_wagner"`, the equation holds over the full fluid region of the Spa
 - **Pressure:** up to 800 MPa
 - **Saturation curve:** triple point to within 1 mK of the critical point (`co2_eos.critical_point(eos="span_wagner")`)
 
-On `eos="nist2026"` (the default), the equation is checked against the values NIST IR 8608 prints (`tests/test_nist2026_verification.py`) and against Span-Wagner over 230 to 800 K and 0.05 to 100 MPa away from the critical point (`tests/test_nist2026_vs_span_wagner.py`), with its own saturation table and triple point (216.5909 K).
+On `eos="nist2026"` (the default), the equation is checked against the values NIST IR 8608 prints (`tests/test_nist2026_verification.py`), with its own saturation table and triple point (216.5909 K).
 
 Transport properties follow the valid ranges of their respective correlations (broadly: gas and liquid up to 100 MPa, with reduced accuracy in the immediate critical region for thermal conductivity).
 
@@ -175,21 +175,16 @@ regenerating the saturation table from scratch via
 
 ## Validation
 
-The Span-Wagner backend (`eos="span_wagner"`) is validated against CoolProp, whose CO₂ is Span-Wagner, across the full valid range. The test suite covers:
+The test suite checks the package against references from outside its own code:
 
-- Single-phase properties on a dense (T, ρ) grid spanning gas, liquid, and supercritical regions
-- Saturation curve properties from triple point to near-critical
-- Transport properties (viscosity and thermal conductivity) across all phases
-- Bulk viscosity (0.5.0) against a reference table at nine near-critical and supercritical states, the dilute limit against Cramer (2012), and finite forward and reverse gradients (`tests/test_bulk_viscosity.py`)
-- Inversions (P,T → ρ), (P,h → state), (ρ,u → state) including near-critical conditions
-- Comparison of all Helmholtz derivatives against CoolProp's analytical values
+- **`eos="nist2026"`** (the default): the values NIST IR 8608 prints (the critical pressure, the triple-point pressure and the reference state of the saturated liquid at 273.15 K, `tests/test_nist2026_verification.py`); the shipped saturation table against a direct Maxwell construction (equal pressure and Gibbs energy) on the equation (`tests/test_nist2026_saturation.py`); the analytic α-derivatives against `jax.grad` (`tests/test_nist2026_derivs.py`).
+- **`eos="span_wagner"`**: density, cp, speed of sound, viscosity and thermal conductivity against CoolProp, whose CO₂ is Span-Wagner, on grids in the supercritical, subcritical liquid and subcritical vapor regions (`tests/test_accuracy_vs_coolprop.py`); the exact identities c_p − c_v = T (∂P/∂T)_ρ² / (ρ² (∂P/∂ρ)_T) and a² = (∂P/∂ρ)_T c_p / c_v (`tests/test_pressure_derivatives.py`); the `(ρ, u)` fast path against an independent autodiff evaluation of the equation (`tests/test_fastpath_validation.py`); reverse-mode gradients of `state_from_Du` against finite differences (`tests/test_inversion_gradients.py`); the bulk viscosity's dilute limit against Cramer (2012) (`tests/test_bulk_viscosity.py`).
+- **Reference gases**: c_p, c_v and speed of sound against stored CoolProp values, compared at the stated tolerances (c_p and c_v 0.2 %, speed of sound 0.1 %) and never by hash; the air and argon transport against the check values Lemmon and Jacobsen (2004) print (`tests/test_reference_gases.py`).
 
 On `eos="span_wagner"`, both libraries implement the same Span-Wagner polynomial and the same reference transport correlations, so empirical agreement across the validation grid is at machine precision for the primary quantities and only loosens where physics (not formulation) amplifies floating-point noise:
 
 - **Density and viscosity:** below 10⁻¹² relative error everywhere on the grid (limited by floating-point evaluation order).
 - **cp, speed of sound, thermal conductivity:** below 10⁻⁹ in the bulk; up to a few × 10⁻⁸ for the speed of sound near the Widom line and within ~10 % of the saturation curve, and up to a few × 10⁻⁶ for cp at the very tip of its peak just above the critical pressure. There the inversion's residual ρ-error is amplified through ∂q/∂ρ, which is locally enormous (cp climbs above 30,000 J/(kg·K) at the peak, so a ~0.1 J/(kg·K) absolute difference still rounds to ~10⁻⁶ relative); at the same (T, ρ) the underlying polynomials still agree at machine precision.
-
-The reference gases meet stated tolerances against stored CoolProp values, compared at those tolerances and never by hash (`tests/test_reference_gases.py`): density 0.05 %, c_p 0.2 %, μ and k 1 %. Their transport terms also meet the check values Lemmon and Jacobsen (2004) print, and helium's the ab initio table of Hurly and Mehl (2007).
 
 Run the validation suite:
 
